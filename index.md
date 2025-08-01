@@ -161,27 +161,34 @@
 - 系统级AI调度
 - 隐私计算实现
 
+### [第25章：OriginOS深度剖析](chapter25.md)
+- OriginOS设计理念与架构革新
+- 原子组件系统实现
+- Multi-Turbo性能优化技术
+- Jovi AI引擎集成
+- 内存融合与存储优化
+
 ## 第八部分：高级主题
 
-### [第25章：Android虚拟化技术](chapter25.md)
+### [第26章：Android虚拟化技术](chapter26.md)
 - 容器化技术应用
 - 多用户与工作资料
 - 虚拟化安全增强
 - 与iOS虚拟化对比
 
-### [第26章：实时性与性能优化](chapter26.md)
+### [第27章：实时性与性能优化](chapter27.md)
 - RT调度器应用
 - Jank检测与优化
 - 内存压力处理
 - 功耗优化策略
 
-### [第27章：逆向工程与安全研究](chapter27.md)
+### [第28章：逆向工程与安全研究](chapter28.md)
 - APK逆向技术
 - 系统调试方法
 - Fuzzing测试
 - 漏洞挖掘技术
 
-### [第28章：Android未来演进](chapter28.md)
+### [第29章：Android未来演进](chapter29.md)
 - Fuchsia OS展望
 - 模块化系统更新
 - AI First设计理念
@@ -189,19 +196,19 @@
 
 ## 附录
 
-### [附录A：调试工具与技巧](chapter29.md)
+### [附录A：调试工具与技巧](chapter30.md)
 - ADB高级用法
 - Systrace性能分析
 - 内核调试方法
 - 逆向工具链
 
-### [附录B：源码编译与定制](chapter30.md)
+### [附录B：源码编译与定制](chapter31.md)
 - AOSP编译环境
 - 设备树配置
 - HAL开发指南
 - 系统签名与发布
 
-### [附录C：参考资源](chapter31.md)
+### [附录C：参考资源](chapter32.md)
 - 官方文档索引
 - 开源项目推荐
 - 安全公告追踪
