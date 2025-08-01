@@ -12,48 +12,112 @@ Android内核基于Linux LTS（长期支持）版本，通过一系列补丁集�
    - Wakelock机制（已逐步被标准Linux的autosleep替代）
    - Early Suspend/Late Resume（已废弃，被Runtime PM替代）
    - CPU频率调节器定制（Interactive Governor）
+   - Doze模式内核支持（通过`alarmtimer`和`timerfd`）
+   - 动态电压频率调节（DVFS）优化
 
 2. **内存管理优化**
    - Low Memory Killer（LMK）及其用户空间实现LMKD
    - ION内存分配器（统一的内存管理框架）
-   - ZRAM压缩交换分区
+   - ZRAM压缩交换分区（使用LZ4/ZSTD算法）
    - KSM（Kernel Samepage Merging）优化
+   - Per-app内存追踪（`memtrack` HAL支持）
+   - 进程状态收集（`/proc/pid/oom_score_adj`）
 
 3. **进程间通信**
    - Binder驱动（高效的IPC机制）
    - Ashmem（匿名共享内存）
+   - FuseD守护进程支持（Android 11+）
+   - HwBinder（硬件服务专用，Android 8.0+）
 
 4. **安全增强**
-   - Paranoid网络权限检查
+   - Paranoid网络权限检查（基于GID）
    - SELinux强制访问控制定制
    - seccomp过滤器扩展
+   - dm-verity完整性验证
+   - 文件加密（fscrypt）集成
 
 ### 2.1.2 内核配置特点
 
 Android内核配置（defconfig）与标准Linux发行版存在显著差异：
 
 ```
+# 核心Android功能
 CONFIG_ANDROID=y
 CONFIG_ANDROID_BINDER_IPC=y
 CONFIG_ANDROID_BINDERFS=y
+CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"
+CONFIG_ANDROID_BINDER_IPC_32BIT=y
+
+# 内存管理
 CONFIG_ANDROID_LOW_MEMORY_KILLER=y
 CONFIG_ASHMEM=y
 CONFIG_ION=y
+CONFIG_ION_SYSTEM_HEAP=y
+CONFIG_ZRAM=y
+CONFIG_CRYPTO_LZ4=y
+
+# 电源管理
+CONFIG_PM_WAKELOCKS=y
+CONFIG_PM_WAKELOCKS_LIMIT=100
+CONFIG_PM_WAKELOCKS_GC=y
+CONFIG_SUSPEND_TIME=y
+
+# 安全相关
+CONFIG_SECURITY_SELINUX=y
+CONFIG_SECURITY_SELINUX_BOOTPARAM=y
+CONFIG_SECURITY_SELINUX_DEVELOP=y
+CONFIG_SECCOMP=y
+CONFIG_SECCOMP_FILTER=y
+
+# 调试支持
+CONFIG_PANIC_TIMEOUT=5
+CONFIG_PANIC_ON_OOPS=y
+CONFIG_DEBUG_RODATA=y
 ```
 
 这些配置选项启用了Android特有的内核功能。值得注意的是，从Android 11开始，许多Android特有功能正在通过GKI（Generic Kernel Image）项目模块化，以减少碎片化。
+
+关键配置差异：
+- **调度器**：Android偏向使用`CONFIG_SCHED_TUNE`进行能效优化
+- **文件系统**：默认启用F2FS、SquashFS用于系统分区
+- **网络**：启用更严格的套接字权限控制
+- **追踪**：默认集成ftrace用于systrace性能分析
 
 ### 2.1.3 与其他系统的对比
 
 **iOS内核定制**：
 - iOS基于XNU（混合内核），包含Mach微内核和BSD层
 - 使用Mach端口进行IPC，而非Binder
+  - Mach消息传递：支持复杂的权限传递和端口权限
+  - 性能开销：每次IPC需要内核调度，开销较大
 - 内存管理更激进，使用Jetsam机制
+  - 基于优先级带（Priority Bands）的内存回收
+  - 内存压力通知（Memory Pressure Notification）
+  - 无swap文件，完全依赖物理内存
+- 安全模型：
+  - 强制代码签名（Mandatory Code Signing）
+  - 沙箱更严格，基于MAC框架
+  - Secure Enclave处理器集成
 
 **鸿蒙内核设计**：
 - 支持微内核和宏内核双架构
+  - LiteOS-A：轻量级内核，用于IoT设备
+  - Linux内核：兼容Android生态
+  - 未来：自研微内核架构
 - IPC机制基于微内核设计，性能优于传统微内核
+  - 分布式软总线：跨设备透明通信
+  - RPC性能优化：硬件加速支持
+  - 自动发现和认证机制
 - 内存管理采用分布式软总线设计
+  - 跨设备内存共享
+  - 智能内存迁移
+  - AI辅助的内存预测
+
+**Linux桌面/服务器内核**：
+- 通用性设计，支持广泛硬件
+- 内存管理保守，依赖swap
+- 调度器公平性优先（CFS）
+- 模块化程度高，驱动可动态加载
 
 ## 2.2 低内存管理器（LMK/LMKD）
 
@@ -65,19 +129,44 @@ Low Memory Killer是Android处理内存压力的核心机制。它通过以下�
    - 定义多个内存阈值（minfree）
    - 每个阈值对应一个进程优先级（adj）
    - 通过`/sys/module/lowmemorykiller/parameters/`进行配置
+   - 典型配置示例（单位：4KB页面）：
+     ```
+     minfree: 18432,23040,27648,32256,36864,46080
+     adj:     0,100,200,300,900,906
+     ```
 
 2. **进程优先级评分**
    - ADJ值范围：-1000到1000
-   - 系统进程：-1000到-800
-   - 前台应用：0
-   - 可见应用：100-200
-   - 后台服务：300-400
-   - 空进程：900-1000
+   - 系统进程：-1000到-800（native系统进程）
+   - 持久进程：-800（persistent应用）
+   - 前台应用：0（FOREGROUND_APP）
+   - 可见应用：100-200（VISIBLE_APP）
+   - 可感知服务：200-300（PERCEPTIBLE_APP）
+   - 后台服务：300-400（BACKUP_APP/SERVICE）
+   - HOME应用：600
+   - 前一个应用：700（PREVIOUS_APP）
+   - 缓存进程：900-999（CACHED_APP）
+   - 空进程：1000（CACHED_APP_EMPTY）
 
 3. **杀进程决策**
    - 当可用内存低于阈值时触发
    - 优先杀死adj值最高的进程
-   - 考虑进程内存占用大小
+   - 考虑进程内存占用大小（`oom_score`计算）
+   - 决策算法：
+     ```
+     foreach (process in processes) {
+         if (process.adj >= min_adj_for_memfree) {
+             score = process.adj * 10000 + process.rss
+             candidates.add(process, score)
+         }
+     }
+     kill(candidates.max_by_score())
+     ```
+
+4. **触发时机**
+   - 内存分配失败（`__alloc_pages_slowpath`）
+   - 定期检查（通过`vmpressure`事件）
+   - 主动触发（`echo 1 > /proc/sys/vm/drop_caches`）
 
 ### 2.2.2 LMKD演进
 
@@ -88,28 +177,111 @@ Low Memory Killer是Android处理内存压力的核心机制。它通过以下�
 - 支持内存压力检测（PSI - Pressure Stall Information）
 - 更好的与用户空间协调
 - 支持进程组管理
+- 支持多种内存压力信号源
+
+**架构演进**：
+1. **Android 4.4-7.x**：基础LMKD
+   - 简单移植内核LMK逻辑
+   - 通过`/proc/meminfo`轮询
+   - 性能开销较大
+
+2. **Android 8.0-9.0**：性能优化
+   - 引入`memory.pressure_level`通知
+   - 减少轮询开销
+   - 支持`ro.lmk.use_minfree_levels`配置
+
+3. **Android 10+**：PSI集成
+   - 使用内核PSI（Pressure Stall Information）
+   - 更精确的压力检测
+   - 支持`ro.lmk.use_psi`开关
+
+4. **Android 12+**：智能化
+   - 机器学习辅助决策
+   - 应用启动预测
+   - 内存压缩协调
 
 **关键接口**：
 - `ProcessList.setOomAdj()`：设置进程优先级
 - `ActivityManagerService.updateOomAdj()`：动态调整
 - Socket通信：`/dev/socket/lmkd`
+- 命令协议：
+  ```
+  LMK_TARGET <minfree> <min_oom_adj>
+  LMK_PROCPRIO <pid> <uid> <oom_adj>
+  LMK_PROCREMOVE <pid>
+  LMK_GETKILLCNT
+  ```
+
+**配置属性**：
+```bash
+# 启用新LMKD
+ro.lmk.use_new_strategy=true
+# 使用PSI
+ro.lmk.use_psi=true
+# PSI触发阈值
+ro.lmk.psi_partial_stall_ms=70
+ro.lmk.psi_complete_stall_ms=700
+# 交换空间阈值
+ro.lmk.swap_free_low_percentage=20
+# 调试级别
+ro.lmk.debug=false
+```
 
 ### 2.2.3 内存压力处理对比
 
 **Linux标准OOM Killer**：
 - 基于`oom_score`计算
+  ```
+  oom_score = (process_memory / total_memory) * 1000
+  oom_score += oom_score_adj  # -1000 到 1000
+  ```
 - 考虑进程的内存使用、运行时间等
 - 相对保守，只在极端情况触发
+- 触发条件：内存分配完全失败
+- 全局决策，可能误杀重要进程
 
 **iOS Jetsam**：
 - 更激进的内存回收策略
-- 基于内存占用和优先级带
+- 基于内存占用和优先级带（Priority Bands）
+  - Band 0：内核线程（不可杀）
+  - Band 1-3：系统关键服务
+  - Band 4-6：系统应用
+  - Band 7-9：第三方应用前台
+  - Band 10+：后台应用
 - 支持内存压力通知机制
+  - `DISPATCH_MEMORYPRESSURE_NORMAL`
+  - `DISPATCH_MEMORYPRESSURE_WARN`
+  - `DISPATCH_MEMORYPRESSURE_CRITICAL`
+- 内存水位线（单位MB）：
+  ```
+  Critical: 15MB (iPhone)
+  Warning: 20MB
+  Normal: 30MB
+  ```
+- 无swap机制，完全依赖物理内存
 
 **鸿蒙内存管理**：
 - 分布式内存池概念
+  - 本地内存池：设备私有
+  - 共享内存池：跨设备访问
+  - 远程内存池：按需迁移
 - 跨设备内存协同
+  - 内存页面迁移（Page Migration）
+  - 远程内存访问（Remote Memory Access）
+  - 内存压缩传输
 - AI预测式内存分配
+  - 应用行为模式学习
+  - 内存需求预测模型
+  - 预分配优化
+
+**性能对比**：
+| 特性 | Linux OOM | Android LMK/D | iOS Jetsam | 鸿蒙 |
+|------|-----------|---------------|------------|------|
+| 触发积极性 | 低 | 中 | 高 | 智能 |
+| 决策延迟 | 高 | 中 | 低 | 低 |
+| 内存利用率 | 60-70% | 70-85% | 85-95% | 80-90% |
+| 误杀率 | 中 | 低 | 极低 | 极低 |
+| 跨设备支持 | 无 | 无 | 无 | 原生 |
 
 ## 2.3 Binder驱动实现
 
@@ -122,16 +294,38 @@ Binder是Android最重要的内核修改之一，提供高效的进程间通信�
    - 内核模块，处理IPC请求
    - 管理进程间的数据传输
    - 维护引用计数和死亡通知
+   - 主要文件：`drivers/android/binder.c`
+   - 设备节点：
+     - `/dev/binder`：应用通信
+     - `/dev/hwbinder`：HAL通信（Android 8.0+）
+     - `/dev/vndbinder`：Vendor通信
 
 2. **ServiceManager**
    - Binder的DNS服务
    - 管理系统服务注册
    - Context Manager（handle=0）
+   - 服务查询接口：
+     - `getService()`：获取服务
+     - `addService()`：注册服务
+     - `listServices()`：列出所有服务
+     - `checkService()`：检查服务是否存在
 
 3. **libbinder库**
    - 用户空间的Binder封装
    - 提供`IBinder`、`IInterface`等接口
    - 处理序列化/反序列化
+   - 关键类：
+     - `BBinder`：服务端实现
+     - `BpBinder`：客户端代理
+     - `Parcel`：数据封装
+     - `ProcessState`：进程状态管理
+     - `IPCThreadState`：线程状态管理
+
+**Binder设计理念**：
+1. **面向对象**：远程对象调用如本地调用
+2. **引用计数**：自动管理生命周期
+3. **线程透明**：自动线程池管理
+4. **安全性**：UID/PID传递，内核级验证
 
 ### 2.3.2 Binder通信机制
 
@@ -139,23 +333,84 @@ Binder是Android最重要的内核修改之一，提供高效的进程间通信�
 1. **mmap内存映射**
    - 发送方和接收方共享内核缓冲区
    - 避免数据多次拷贝
-   - 典型映射大小：1MB-4MB
+   - 典型映射大小：
+     - 普通应用：1MB
+     - 系统服务：4MB
+     - ServiceManager：128KB
+   - 内存布局：
+     ```
+     +----------------+ 0x00000000
+     | 用户空间数据   |
+     +----------------+ 
+     | mmap区域       | <- Binder映射区
+     +----------------+
+     | 堆栈空间       |
+     +----------------+ 0xFFFFFFFF
+     ```
 
 2. **事务处理**
-   - `BC_TRANSACTION`：发起事务
-   - `BR_TRANSACTION`：接收事务
-   - `BR_REPLY`：返回结果
+   - 命令协议：
+     - `BC_TRANSACTION`：发起事务
+     - `BC_REPLY`：发送回复
+     - `BR_TRANSACTION`：接收事务
+     - `BR_REPLY`：接收回复
+     - `BC_ACQUIRE`/`BC_RELEASE`：引用计数
+     - `BC_INCREFS`/`BC_DECREFS`：弱引用
+   - 事务流程：
+     ```
+     Client                    Kernel                     Server
+       |                         |                          |
+       |--BC_TRANSACTION------->|                          |
+       |                         |--BR_TRANSACTION--------->|
+       |                         |                          |
+       |                         |<-----BC_REPLY------------|
+       |<----BR_REPLY-----------|                          |
+     ```
 
 3. **线程池管理**
    - 动态创建Binder线程
    - 最大线程数限制（默认16）
    - `ioctl(BINDER_SET_MAX_THREADS)`
+   - 线程管理策略：
+     - 主线程：负责注册服务
+     - 工作线程：处理客户端请求
+     - 按需创建：根据负载动态调整
 
 **关键数据结构**：
 - `binder_proc`：进程描述符
+  ```c
+  struct binder_proc {
+      struct hlist_node proc_node;
+      struct rb_root threads;
+      struct rb_root nodes;
+      struct rb_root refs_by_desc;
+      struct list_head todo;
+      wait_queue_head_t wait;
+      struct binder_stats stats;
+      struct list_head delivered_death;
+      int max_threads;
+      int requested_threads;
+      int ready_threads;
+      long default_priority;
+  };
+  ```
 - `binder_node`：Binder实体
+  - 本地强引用计数
+  - 本地弱引用计数
+  - 远程引用列表
 - `binder_ref`：Binder引用
+  - 描述符（desc）
+  - 目标节点
+  - 强/弱引用计数
 - `binder_buffer`：数据缓冲区
+  - 物理页面列表
+  - 用户空间地址
+  - 内核空间地址
+
+**一次拷贝原理**：
+1. 客户端将数据拷贝到内核空间
+2. 内核通过mmap将该内存映射到服务端
+3. 服务端直接访问映射内存，无需再次拷贝
 
 ### 2.3.3 Binder与其他IPC对比
 
@@ -166,15 +421,70 @@ Binder（1次拷贝）：用户空间A → 内核/用户空间B共享区域
 共享内存（0次拷贝）：直接访问，但需要同步机制
 ```
 
+**详细性能比较**：
+| IPC机制 | 拷贝次数 | 延迟(µs) | 吞吐量(MB/s) | CPU占用 |
+|---------|---------|-----------|-------------|----------|
+| Pipe | 2 | 5.4 | 180 | 高 |
+| Socket | 2 | 5.0 | 200 | 高 |
+| Binder | 1 | 2.5 | 400 | 中 |
+| 共享内存 | 0 | 0.5 | 1000+ | 低 |
+| Message Queue | 2 | 6.0 | 150 | 高 |
+
+**Linux传统IPC**：
+1. **管道（Pipe）**
+   - 单向通信
+   - 缓冲区有限（64KB
+   - 适合父子进程
+
+2. **Socket**
+   - 双向通信
+   - 支持网络通信
+   - 开销较大
+
+3. **消息队列**
+   - 有序消息传递
+   - 消息大小限制
+   - 系统资源有限
+
+4. **共享内存**
+   - 最快速度
+   - 需要同步机制
+   - 复杂度高
+
 **iOS XPC/Mach端口**：
 - 基于消息传递
+  - Mach消息头：描述消息类型和大小
+  - 复杂类型：端口权限、内存对象
+  - out-of-line数据：大数据传输
 - 支持复杂的权限传递
-- 性能略低于Binder
+  - Send Right：发送权限
+  - Receive Right：接收权限
+  - Send Once Right：一次性发送
+- 性能特点
+  - 延迟：3-4µs
+  - 每次IPC需要内核态切换
+  - 支持异步消息
 
 **鸿蒙软总线**：
 - 支持跨设备IPC
+  - 近场通信：Bluetooth/WiFi Direct
+  - 远程通信：TCP/IP
+  - 透明切换
 - 自动发现和连接
+  - mDNS/DNS-SD协议
+  - 设备能力声明
+  - 动态路由选择
 - 安全认证机制
+  - 设备认证
+  - 链路加密
+  - 权限控制
+
+**Binder优势总结**：
+1. **性能优先**：只有1次数据拷贝
+2. **面向对象**：自然的接口设计
+3. **线程管理**：内核级线程池
+4. **安全性**：UID/PID自动传递
+5. **稳定性**：引用计数和死亡通知
 
 ## 2.4 ION内存分配器
 
