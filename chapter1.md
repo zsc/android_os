@@ -12,18 +12,71 @@ Android基于Linux内核构建，但并非标准Linux发行版。Google对Linux�
 
 **核心内核组件：**
 - **Binder IPC驱动**：Android特有的进程间通信机制，位于`drivers/android/binder.c`
+  - 基于内存映射（mmap）实现高效数据传输
+  - 支持对象引用计数和死亡通知机制
+  - 实现了capability-based安全模型
+  - 核心ioctl命令：BINDER_WRITE_READ、BINDER_SET_CONTEXT_MGR等
+  
 - **Ashmem（Anonymous Shared Memory）**：匿名共享内存，提供进程间内存共享
+  - 通过文件描述符传递共享内存区域
+  - 支持内存区域的pin/unpin操作
+  - 实现了内存压力下的自适应回收
+  - 主要接口：ashmem_create_region()、ashmem_set_prot_region()
+  
 - **低内存管理器（LMK/LMKD）**：根据内存压力主动终止进程
+  - 基于oom_score_adj值的多级阈值机制
+  - 与用户空间lmkd守护进程协作（Android 9.0+）
+  - 集成PSI（Pressure Stall Information）监控
+  - 支持内存压力事件通知（memory.pressure_level）
+  
 - **Wakelock/Suspend机制**：电源管理增强
+  - 早期版本：基于/sys/power/wake_lock接口
+  - 现代实现：autosleep + wake sources机制
+  - 与Linux主线的suspend blocker合并
+  - 支持部分唤醒锁（PARTIAL_WAKE_LOCK）等类型
+  
 - **ION内存分配器**：统一的内存管理框架
+  - 多种heap类型：system_heap、carveout_heap、cma_heap等
+  - 与GPU、Camera、Video等硬件模块集成
+  - 支持secure buffer分配（DRM保护内容）
+  - 逐步迁移到标准DMA-BUF框架
+
+**内核安全增强：**
+- **PAN/PXN（Privileged Access Never/Execute Never）**：防止内核代码执行用户空间代码
+- **KASLR（Kernel Address Space Layout Randomization）**：内核地址空间随机化
+- **CFI（Control Flow Integrity）**：控制流完整性保护
+- **Shadow Call Stack**：返回地址保护机制
 
 内核层还负责：
 - 进程和线程管理（基于Linux的task_struct）
+  - Android特定的进程优先级调整（setpriority）
+  - cgroup基础的资源控制（cpu、cpuset、memory等）
+  - 进程冻结机制（freezer cgroup）
+  
 - 内存管理（包括虚拟内存、页面置换）
+  - ZRAM压缩交换分区
+  - KSM（Kernel Samepage Merging）内存去重
+  - 内存压缩（zsmalloc分配器）
+  
 - 文件系统支持（ext4、F2FS等）
+  - dm-verity：块设备完整性验证
+  - dm-crypt：全盘加密支持
+  - sdcardfs：外部存储权限管理
+  
 - 设备驱动（触摸屏、传感器、GPU等）
+  - 统一的设备树（Device Tree）描述
+  - 早期挂载（early mount）支持
+  - 模块化驱动（GKI - Generic Kernel Image）
+  
 - 网络协议栈
+  - Netfilter扩展（xt_qtaguid流量统计）
+  - 移动网络优化（TCP拥塞控制算法）
+  - VPN框架集成
+  
 - 安全机制（SELinux、seccomp等）
+  - SEAndroid：Android特定的SELinux策略
+  - seccomp-bpf：系统调用过滤
+  - 内核加固（hardening）选项
 
 ### 1.1.2 硬件抽象层（HAL）
 
@@ -31,21 +84,94 @@ HAL位于内核之上，为上层提供统一的硬件访问接口。Android HAL
 
 **Legacy HAL（Android 8.0之前）：**
 - 基于共享库（.so文件）
+  - hw_module_t结构定义模块信息
+  - hw_device_t结构定义设备操作
+  - dlopen()动态加载HAL模块
 - 直接链接到系统进程
+  - HAL代码运行在调用进程空间
+  - 崩溃会影响系统稳定性
+  - 难以进行权限隔离
 - 更新需要OTA系统升级
+  - HAL与framework紧耦合
+  - 无法独立更新vendor实现
 
 **Project Treble引入的新HAL架构：**
 - **HIDL（HAL Interface Definition Language）**：定义HAL接口
+  - 类似AIDL的接口描述语言
+  - 支持版本化接口（如android.hardware.camera@2.0）
+  - 自动生成C++/Java绑定代码
+  - Passthrough模式：兼容旧HAL
+  - Binderized模式：独立进程运行
+  
 - **HAL进程隔离**：HAL运行在独立进程
+  - hwservicemanager管理HAL服务
+  - 基于Binder的跨进程通信
+  - 独立的SELinux域限制
+  - 崩溃不影响framework稳定性
+  
 - **Vendor Interface（VINTF）**：版本管理和兼容性保证
+  - manifest.xml声明HAL版本
+  - compatibility_matrix.xml定义兼容性要求
+  - 运行时版本检查机制
+  - OTA升级兼容性验证
+  
 - 支持Vendor分区独立更新
+  - /vendor分区存储HAL实现
+  - /system分区与vendor分区解耦
+  - GSI（Generic System Image）支持
+
+**AIDL HAL（Android 11+）：**
+- 统一使用AIDL替代HIDL
+- 更好的稳定性承诺
+- 支持Rust语言实现
+- 简化的版本管理
 
 主要HAL模块包括：
 - **Graphics HAL**：包括Gralloc（图形内存分配）、HWComposer（硬件合成）
+  - Gralloc：分配图形缓冲区，支持多种格式（RGBA、YUV等）
+  - HWC2（Hardware Composer 2.0）：图层合成策略决策
+  - Vulkan HAL：低开销图形API支持
+  - RenderScript HAL：并行计算加速
+  
 - **Audio HAL**：音频输入输出接口
+  - 音频流管理（playback/capture）
+  - 音频路由控制（speaker/headphone切换）
+  - 音效处理链（equalizer、reverb等）
+  - 低延迟音频路径（FastTrack）
+  - MMAP模式支持（共享内存音频）
+  
 - **Camera HAL**：相机硬件接口，从HAL1到HAL3的演进
+  - HAL1：简单的同步接口
+  - HAL3：基于请求的异步管线
+  - 支持RAW图像捕获
+  - 多摄像头同步控制
+  - 高级元数据（3A算法参数）
+  
 - **Sensors HAL**：传感器数据访问
+  - 批处理模式（batch mode）降低功耗
+  - 唤醒/非唤醒传感器分类
+  - 连续/单次/特殊报告模式
+  - 动态传感器支持（USB传感器）
+  - Multi-HAL支持多供应商传感器
+  
 - **Radio HAL（RIL）**：无线通信接口
+  - 电话服务（voice call）
+  - 数据连接管理（LTE/5G）
+  - 短信收发（SMS/MMS）
+  - SIM卡管理（单卡/双卡）
+  - 网络切换（2G/3G/4G/5G）
+
+**其他重要HAL模块：**
+- **Bluetooth HAL**：蓝牙协议栈接口
+- **WiFi HAL**：无线网络硬件控制
+- **NFC HAL**：近场通信支持
+- **Fingerprint HAL**：指纹识别硬件
+- **Keymaster HAL**：硬件密钥存储
+- **Power HAL**：功耗管理策略
+- **Thermal HAL**：温度监控与调节
+- **Health HAL**：电池健康状态
+- **Light HAL**：LED指示灯控制
+- **Vibrator HAL**：震动马达控制
 
 ### 1.1.3 Android运行时（ART）和原生库层
 
@@ -53,18 +179,119 @@ HAL位于内核之上，为上层提供统一的硬件访问接口。Android HAL
 
 **Android Runtime (ART)：**
 - **DEX字节码执行**：执行Dalvik Executable格式
+  - DEX文件结构：header、string_ids、type_ids、method_ids等
+  - 多DEX支持（MultiDex）解决65K方法限制
+  - DEX优化：指令精简、常量池共享
+  - ODEX/VDEX/ART文件格式演进
+  
 - **AOT编译**：安装时编译，提升运行性能
+  - dex2oat编译器：DEX转native代码
+  - 编译模式：speed、speed-profile、space等
+  - Profile-guided优化：基于使用情况优化
+  - 云端配置文件（Cloud Profiles）加速优化
+  
 - **JIT编译**：运行时编译热点代码
+  - 热点检测机制：方法调用计数
+  - OSR（On-Stack Replacement）：循环优化
+  - Code Cache管理：JIT代码存储
+  - 与AOT协同：混合编译策略
+  
 - **垃圾回收**：并发、分代GC算法
+  - Concurrent Copying GC：并发复制收集器
+  - Young/Old代分离：分代收集策略
+  - Region-based内存管理
+  - Reference Queue处理：软/弱/虚引用
+  - GC触发策略：allocation、explicit、background
+  
 - **调试支持**：JDWP协议实现
+  - ADB调试桥接
+  - Method Tracing支持
+  - Sampling Profiler集成
+  - Heap Dump生成
+
+**ART内部架构：**
+- **Runtime核心**
+  - ClassLinker：类加载和链接
+  - Heap管理：内存分配和GC
+  - Thread管理：线程创建和同步
+  - Monitor机制：对象锁实现
+  
+- **编译器前端**
+  - DEX解析器
+  - IR（中间表示）生成
+  - 优化Pass管理
+  
+- **编译器后端**
+  - 寄存器分配
+  - 代码生成（ARM/x86等）
+  - 重定位信息
 
 **原生C/C++库：**
 - **Bionic**：Android的C库实现，轻量级的libc
+  - 精简的POSIX实现
+  - 小巧的pthread实现
+  - 自定义的malloc实现（jemalloc/scudo）
+  - 时区数据独立更新（APEX）
+  - fortify安全增强
+  
 - **WebKit/Chromium**：Web渲染引擎
+  - Blink渲染引擎
+  - V8 JavaScript引擎
+  - 多进程架构（Browser/Renderer分离）
+  - GPU加速渲染
+  - WebView实现基础
+  
 - **OpenGL ES**：3D图形库
+  - EGL上下文管理
+  - GLES 2.0/3.x实现
+  - 扩展支持（OES扩展）
+  - 与Vulkan协同工作
+  
 - **SQLite**：轻量级数据库
+  - WAL（Write-Ahead Logging）模式
+  - Full-text search支持
+  - 自定义函数扩展
+  - 加密扩展支持（SQLCipher）
+  
 - **Media Framework**：音视频编解码（Stagefright/MediaCodec）
+  - Codec2框架（替代OMX）
+  - 硬件编解码器接入
+  - 容器格式支持（MP4、WebM等）
+  - DRM框架集成
+  - 低延迟音视频管线
+  
 - **SSL**：安全通信库
+  - BoringSSL（Google的OpenSSL分支）
+  - TLS 1.3支持
+  - 证书验证和管理
+  - 硬件加速支持
+
+**其他重要原生库：**
+- **ICU（International Components for Unicode）**：国际化支持
+  - 字符编码转换
+  - 本地化（locale）支持
+  - 时间日期格式化
+  - 文本边界分析
+  
+- **libbinder**：Binder IPC的C++实现
+  - IBinder接口
+  - Parcel序列化
+  - 死亡通知机制
+  
+- **libutils/libcutils**：系统工具库
+  - RefBase引用计数
+  - Looper事件循环
+  - Properties系统属性
+  
+- **libhardware**：HAL加载框架
+  - hw_get_module()接口
+  - 模块版本管理
+  
+- **Skia**：2D图形库
+  - Canvas绘制API
+  - 路径和图形渲染
+  - 文字渲染（与FreeType集成）
+  - GPU加速支持
 
 ### 1.1.4 Java API框架层
 
