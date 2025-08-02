@@ -6,53 +6,151 @@ Init进程是Android系统中第一个用户空间进程，承担着整个系统
 
 ### 4.1.1 Init进程的诞生
 
-当Linux内核完成自身初始化后，会启动第一个用户空间进程——Init进程（PID=1）。Android的Init进程实现位于`system/core/init/`目录，其入口函数是`main()`。
+当Linux内核完成自身初始化后，会启动第一个用户空间进程——Init进程（PID=1）。Android的Init进程实现位于`system/core/init/`目录，其入口函数是`main()`。内核通过`run_init_process()`调用`/init`二进制文件，这是ramdisk中的第一个程序。
+
+**内核到用户空间的转换**
+```
+kernel_init() -> run_init_process("/init") -> execve("/init")
+```
 
 Init进程的生命周期分为两个阶段：
 
 **First Stage Init**
 - 挂载基础文件系统（/dev、/proc、/sys等）
+  - 使用`mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755")`
+  - 创建必要的子目录：/dev/pts、/dev/socket、/dev/dm-user
 - 创建设备节点
+  - `/dev/null`、`/dev/zero`、`/dev/full`等基础设备
+  - `/dev/kmsg`用于内核日志
+  - `/dev/random`、`/dev/urandom`用于随机数
 - 初始化内核日志
+  - 通过`android::base::InitLogging()`设置日志系统
+  - 重定向stdout/stderr到`/dev/kmsg`
 - 加载SELinux策略（如果是强制模式）
+  - 调用`SelinuxInitialize()`加载编译后的策略
+  - 设置进程上下文为`u:r:init:s0`
 - 执行Second Stage Init
+  - 通过`execv("/system/bin/init", argv)`重新执行自身
+  - 传递`--second-stage`参数标识
 
 **Second Stage Init**
 - 初始化属性服务（Property Service）
+  - 创建属性共享内存区域
+  - 启动Unix域套接字监听属性设置请求
+  - 加载默认属性文件（default.prop、build.prop等）
 - 解析RC脚本
+  - 从`/system/etc/init/`、`/vendor/etc/init/`等目录加载
+  - 构建Action和Service的内部数据结构
+  - 验证语法正确性和权限要求
 - 启动系统服务
+  - 根据class和触发器有序启动
+  - 设置进程的capabilities、优先级、cgroup等
 - 进入主事件循环
+  - 基于epoll的事件驱动模型
+  - 处理属性变化、子进程退出、控制消息等
+
+**关键环境变量设置**
+```
+PATH=/system/bin:/system/xbin:/vendor/bin
+LD_LIBRARY_PATH=/system/lib64:/vendor/lib64
+ANDROID_ROOT=/system
+ANDROID_DATA=/data
+```
 
 ### 4.1.2 关键数据结构
 
 Init进程使用三个核心数据结构管理系统启动：
 
 **Action（动作）**
-```
+```cpp
 struct Action {
     std::string name;
     std::vector<Command> commands;
     std::map<std::string, std::string> property_triggers;
     std::string event_trigger;
     bool oneshot;
+    int trigger_order;  // 触发优先级
+    
+    // 执行状态管理
+    size_t current_command;
+    bool ExecuteOneCommand();
+    bool CheckPropertyTriggers();
 }
 ```
-Action代表一组命令的集合，可以被触发器（Trigger）激活执行。
+Action代表一组命令的集合，可以被触发器（Trigger）激活执行。每个Action可以包含多个命令，按顺序执行。
 
 **Service（服务）**
-```
+```cpp
 struct Service {
     std::string name;
-    unsigned flags;
+    unsigned flags;  // SVC_RUNNING, SVC_DISABLED等
     pid_t pid;
     std::vector<std::string> args;
     std::vector<Option> options;
+    
+    // 服务控制
+    int crash_count;
+    time_t time_started;
+    time_t time_crashed;
+    
+    // 资源限制
+    std::vector<std::pair<int, rlimit>> rlimits;
+    std::vector<std::string> writepid_files;
+    
+    // 安全上下文
+    std::string seclabel;
+    std::vector<uid_t> supp_gids;
+    CapSet capabilities;
+    
+    // 命名空间隔离
+    unsigned namespace_flags;  // CLONE_NEWPID, CLONE_NEWNET等
 }
 ```
-Service代表需要启动和管理的守护进程。
+Service代表需要启动和管理的守护进程，包含完整的进程管理信息。
 
 **Property（属性）**
-系统属性采用共享内存实现，通过`property_service.cpp`管理，提供跨进程的配置共享机制。
+```cpp
+// 属性存储结构
+struct prop_info {
+    atomic_uint_least32_t serial;  // 版本号，用于检测变化
+    char value[PROP_VALUE_MAX];   // 属性值（92字节）
+    char name[PROP_NAME_MAX];     // 属性名（32字节）
+};
+
+// 属性区域管理
+struct prop_area {
+    uint32_t bytes_used;
+    atomic_uint_least32_t serial;
+    uint32_t magic;
+    uint32_t version;
+    char data[0];  // 实际属性数据
+};
+```
+系统属性采用共享内存实现，通过`property_service.cpp`管理，提供跨进程的配置共享机制。属性存储在多个内存区域中，按前缀分组以提高查找效率。
+
+**命令管理器（CommandManager）**
+```cpp
+class BuiltinFunctionMap {
+    std::map<std::string, BuiltinFunction> functions_;
+    
+    // 注册的内置命令
+    void RegisterBuiltinFunctions() {
+        Register("chmod", do_chmod);
+        Register("chown", do_chown);
+        Register("class_start", do_class_start);
+        Register("copy", do_copy);
+        Register("exec", do_exec);
+        Register("mkdir", do_mkdir);
+        Register("mount", do_mount);
+        Register("setprop", do_setprop);
+        Register("start", do_start);
+        Register("stop", do_stop);
+        Register("trigger", do_trigger);
+        Register("write", do_write);
+        // ... 更多命令
+    }
+};
+```
 
 ### 4.1.3 事件循环机制
 
@@ -60,37 +158,196 @@ Init进程的主循环基于epoll实现，监听以下事件：
 - 属性设置请求（通过Unix域套接字）
 - 子进程退出信号（SIGCHLD）
 - 其他进程的控制命令
+- 内核消息（通过netlink套接字）
 
-主循环伪代码：
+**Epoll事件源注册**
+```cpp
+void Epoll::Open() {
+    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
+    
+    // 注册信号处理
+    RegisterHandler(signal_fd, HandleSignals);
+    
+    // 注册属性服务
+    RegisterHandler(property_fd, HandlePropertySet);
+    
+    // 注册控制消息
+    RegisterHandler(init_fd, HandleInitSocket);
+    
+    // 注册子进程监控
+    RegisterHandler(sigchld_fd, HandleSigchld);
+}
 ```
-while (true) {
-    ExecutePendingActions();
-    RestartCrashedServices();
-    int timeout = CalculateTimeout();
-    epoll_wait(epoll_fd, events, timeout);
-    HandlePropertySet();
-    HandleSignals();
+
+**主循环实现**
+```cpp
+int main() {
+    // ... 初始化代码 ...
+    
+    while (true) {
+        // 1. 执行待处理的Actions
+        if (!ActionQueue.empty()) {
+            auto action = ActionQueue.front();
+            action->ExecuteOneCommand();
+            if (action->IsCompleted()) {
+                ActionQueue.pop();
+            }
+        }
+        
+        // 2. 检查需要重启的服务
+        for (auto& service : ServiceList) {
+            if (service.flags & SVC_RESTARTING) {
+                if (CurrentTime() > service.time_crashed + 
+                    service.restart_period) {
+                    service.Start();
+                }
+            }
+        }
+        
+        // 3. 计算超时时间
+        int timeout = -1;  // 默认无限等待
+        if (!ActionQueue.empty()) {
+            timeout = 0;  // 有待处理命令，立即返回
+        } else if (HasRestartingServices()) {
+            timeout = CalculateRestartTimeout();
+        }
+        
+        // 4. 等待事件
+        epoll_event events[32];
+        int nr = epoll_wait(epoll_fd, events, 32, timeout);
+        
+        // 5. 处理事件
+        for (int i = 0; i < nr; i++) {
+            auto handler = handlers_[events[i].data.fd];
+            handler();
+        }
+    }
+}
+```
+
+**信号处理机制**
+```cpp
+void HandleSignals() {
+    signalfd_siginfo info;
+    read(signal_fd, &info, sizeof(info));
+    
+    switch (info.ssi_signo) {
+        case SIGCHLD:
+            ReapChildren();
+            break;
+        case SIGTERM:
+        case SIGINT:
+            HandleShutdown();
+            break;
+        case SIGUSR1:
+            HandleBootchart();
+            break;
+    }
+}
+
+void ReapChildren() {
+    while (true) {
+        int status;
+        pid_t pid = waitpid(-1, &status, WNOHANG);
+        if (pid <= 0) break;
+        
+        Service* service = FindServiceByPid(pid);
+        if (service) {
+            service->Reap(status);
+            if (service->flags & SVC_CRITICAL) {
+                // 关键服务崩溃，可能触发重启
+                HandleCriticalCrash(service);
+            }
+        }
+    }
 }
 ```
 
 ### 4.1.4 与其他系统的对比
 
 **Linux传统init（SysV/systemd）**
-- SysV init：基于运行级别，串行执行
-- systemd：基于依赖图，并行启动
-- Android init：基于触发器，事件驱动
+
+*SysV init特点：*
+- 基于运行级别（0-6），每个级别对应不同的系统状态
+- 使用Shell脚本（/etc/init.d/），串行执行
+- 简单但启动速度慢，缺乏依赖管理
+- 通过`update-rc.d`或`chkconfig`管理服务
+
+*systemd特点：*
+- 基于Unit文件（.service、.socket、.target等）
+- 支持依赖关系（Requires、After、Before等）
+- 并行启动服务，显著提升启动速度
+- Socket激活和D-Bus激活
+- 内置日志系统（journald）
+- Cgroup集成，更好的资源管理
+
+*Android init对比：*
+- 更轻量级，专为嵌入式设备优化
+- RC脚本比systemd unit更简单
+- 触发器机制更灵活，适合动态系统状态
+- 深度集成Android特性（属性系统、SELinux）
 
 **iOS launchd**
-- 统一的服务管理框架
-- 支持按需启动（on-demand）
-- XML格式的plist配置文件
-- 更强的权限隔离
+
+*架构特点：*
+- 统一的进程管理器，替代了init、inetd、cron等
+- 使用XML plist文件定义服务
+- 支持多种启动条件（RunAtLoad、StartInterval、WatchPaths等）
+- XPC（跨进程通信）原生支持
+
+*与Android init对比：*
+```
+iOS launchd plist:
+<dict>
+    <key>Label</key>
+    <string>com.apple.service</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/service</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+
+Android RC:
+service apple_service /system/bin/service
+    class core
+    user system
+    group system
+```
+
+*权限模型差异：*
+- iOS：基于entitlements和沙箱profile
+- Android：基于Linux UID/GID和SELinux
+- iOS更封闭但更安全，Android更灵活
 
 **鸿蒙OS init**
-- 采用分布式设计理念
-- 支持跨设备服务启动
-- 内置能力调度框架
-- 更细粒度的权限控制
+
+*分布式特性：*
+- 服务可以跨设备启动和迁移
+- 分布式软总线支持
+- 能力（Ability）框架集成
+- 支持原子化服务
+
+*与Android对比：*
+- 鸿蒙：`distributed_service`标签支持跨设备
+- Android：仅支持本地服务管理
+- 鸿蒙：内置分布式安全认证
+- Android：需要额外实现跨设备通信
+
+*配置文件对比：*
+```json
+// 鸿蒙服务配置
+{
+    "services": [{
+        "name": "distributed_service",
+        "path": "/system/bin/d_service",
+        "distributed": true,
+        "capability": ["ohos.permission.DISTRIBUTED_DATA"],
+        "devices": ["phone", "tablet", "tv"]
+    }]
+}
+```
 
 ## 4.2 RC脚本与系统属性
 
@@ -99,45 +356,227 @@ while (true) {
 Android RC（Run Commands）脚本采用自定义的领域特定语言（DSL），主要包含四种语句类型：
 
 **Action定义**
-```
+```rc
 on <trigger> [&& <trigger>]*
     <command>
     <command>
     ...
 ```
 
-**Service定义**
+**完整的Action示例**
+```rc
+# 早期初始化
+on early-init
+    start ueventd
+    mkdir /mnt/vendor/persist 0771 root system
+    
+# 属性触发器
+on property:sys.boot_completed=1
+    setprop sys.runtime.firstboot.end ${ro.runtime.firstboot.end}
+    exec_background - system system -- /system/bin/bootstat --record_boot_complete
+    
+# 多条件触发器
+on property:vold.decrypt=trigger_restart_framework && property:ro.crypto.type=file
+    class_start main
+    class_start late_start
 ```
+
+**Service定义**
+```rc
 service <name> <pathname> [ <argument> ]*
     <option>
     <option>
     ...
 ```
 
-**Import语句**
-```
-import <path>
+**完整的Service示例**
+```rc
+# 基础服务示例
+service servicemanager /system/bin/servicemanager
+    class core animation
+    user system
+    group system readproc
+    critical
+    onrestart restart apexd
+    onrestart restart audioserver
+    onrestart restart gatekeeperd
+    onrestart class_restart main
+    writepid /dev/cpuset/system-background/tasks
+    
+# 厂商服务示例（小米）
+service mi_thermald /system/bin/mi_thermald
+    class main
+    user system
+    group system
+    capabilities SYS_NICE NET_ADMIN
+    socket mi_thermald stream 0660 system system
 ```
 
-**触发器类型**
-- `early-init`：最早的初始化阶段
-- `init`：基础初始化完成后
-- `late-init`：所有init阶段完成后
-- `boot`：基础服务启动完成
-- `property:<name>=<value>`：属性值变化触发
+**Import语句**
+```rc
+# 静态导入
+import /init.${ro.hardware}.rc
+import /vendor/etc/init/hw/init.${ro.hardware}.rc
+import /system/etc/init/hw/init.${ro.zygote}.rc
+
+# 动态导入（基于属性）
+import /init.recovery.${ro.hardware}.rc
+```
+
+**触发器类型详解**
+
+*启动阶段触发器：*
+- `early-init`：最早的初始化阶段，SELinux尚未加载
+- `init`：基础文件系统已挂载
+- `late-init`：所有init.*触发器完成后
+- `boot`：/data分区已挂载，加密状态确定
+- `post-fs`：/system挂载后立即执行
+- `post-fs-data`：/data挂载并解密后执行
+- `zygote-start`：在启动zygote前执行
+- `early-boot`：boot完成后的早期阶段
+- `charger`：充电模式下的特殊触发器
+
+*属性触发器：*
+```rc
+# 精确匹配
+on property:persist.sys.language=zh-CN
+    setprop persist.sys.locale zh-CN
+
+# 通配符匹配
+on property:sys.boot_from_charger_mode=1
+    trigger late-init
+
+# 多属性组合
+on property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+    start vold_decrypt
+```
+
+*自定义触发器：*
+```rc
+# 定义触发器
+on enable-logging
+    start logd
+    start logd-reinit
+
+# 触发自定义触发器
+on boot
+    trigger enable-logging
+```
 
 ### 4.2.2 RC脚本解析器
 
 Init进程使用`ActionParser`、`ServiceParser`等类解析RC文件：
 
-1. **词法分析**：将文本分解为Token
-2. **语法分析**：构建Action和Service对象
-3. **语义检查**：验证命令和选项的合法性
-4. **执行准备**：将Action加入触发队列
+**解析器架构**
+```cpp
+class Parser {
+    std::map<std::string, std::unique_ptr<SectionParser>> parsers_;
+    
+    void AddSectionParser(const std::string& name, 
+                         std::unique_ptr<SectionParser> parser) {
+        parsers_[name] = std::move(parser);
+    }
+    
+    void ParseData(const std::string& data) {
+        Tokenizer tokenizer(data);
+        while (tokenizer.HasMore()) {
+            auto tokens = tokenizer.GetLine();
+            if (IsSectionStart(tokens[0])) {
+                current_parser_ = parsers_[tokens[0]];
+            }
+            current_parser_->ParseLine(tokens);
+        }
+    }
+};
+```
 
-解析器支持条件编译和变量替换：
-- `${property_name}`：属性值替换
-- `$(import_path)`：动态导入路径
+**解析流程**
+
+1. **词法分析（Tokenizer）**
+```cpp
+// 将文本分解为Token，处理引号、转义字符
+std::vector<std::string> Tokenizer::GetLine() {
+    // 跳过空白和注释
+    SkipWhitespace();
+    if (current_ == '#') SkipToNextLine();
+    
+    // 解析token
+    while (!IsEndOfLine()) {
+        if (current_ == '"') {
+            tokens.push_back(ParseQuotedString());
+        } else {
+            tokens.push_back(ParseWord());
+        }
+    }
+}
+```
+
+2. **语法分析（Parser）**
+```cpp
+class ActionParser : public SectionParser {
+    void ParseSection(std::vector<std::string>& args) {
+        // "on" <trigger> [&& <trigger>]*
+        auto action = std::make_unique<Action>();
+        for (size_t i = 1; i < args.size(); i++) {
+            if (args[i] == "&&") continue;
+            action->AddTrigger(args[i]);
+        }
+    }
+    
+    void ParseLine(std::vector<std::string>& args) {
+        // 解析命令
+        auto cmd = Command(args[0], args.begin() + 1, args.end());
+        current_action_->AddCommand(cmd);
+    }
+};
+```
+
+3. **语义检查**
+```cpp
+bool Service::ParseLine(const std::vector<std::string>& args) {
+    static const OptionParserMap option_parsers = {
+        {"class", ParseClass},
+        {"user", ParseUser},
+        {"group", ParseGroup},
+        {"capabilities", ParseCapabilities},
+        {"seclabel", ParseSeclabel},
+        {"oneshot", ParseOneshot},
+        {"disabled", ParseDisabled},
+        // ... 更多选项
+    };
+    
+    auto parser = option_parsers.find(args[0]);
+    if (parser == option_parsers.end()) {
+        return Error("Invalid option: " + args[0]);
+    }
+    return parser->second(args);
+}
+```
+
+4. **变量替换和条件处理**
+```cpp
+// 属性值替换
+std::string ExpandProps(const std::string& src) {
+    // ${property_name} -> property_value
+    // ${property_name:-default} -> 带默认值
+    std::regex prop_regex(R"(\$\{([^}]+)\})");
+    return std::regex_replace(src, prop_regex, 
+        [](const std::smatch& match) {
+            return GetProperty(match[1].str());
+        });
+}
+
+// 条件导入
+if (android::base::GetBoolProperty("ro.debuggable", false)) {
+    ParseConfig("/system/etc/init/debug.rc");
+}
+```
+
+**解析优化**
+- 预编译的二进制格式（.rcb文件）
+- 缓存解析结果避免重复解析
+- 并行解析多个RC文件
+- 增量解析支持动态加载
 
 ### 4.2.3 系统属性服务
 
