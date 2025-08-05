@@ -62,6 +62,72 @@ ContentProvider的独特优势：
 - **生命周期管理**：由系统管理Provider进程的启动和销毁
 - **数据类型抽象**：支持结构化数据、文件、流等多种数据类型
 
+### 9.1.3 与其他数据共享机制的对比
+
+Android提供了多种数据共享机制，ContentProvider在其中的定位：
+
+```
+数据共享机制对比：
+┌────────────────┬─────────────────┬─────────────────┬──────────────────┐
+│     机制       │  适用场景        │   性能特征       │    安全性        │
+├────────────────┼─────────────────┼─────────────────┼──────────────────┤
+│ ContentProvider│ 结构化数据      │ 中等(IPC开销)   │ 高(URI权限)      │
+│ Shared Prefs   │ 简单配置        │ 高(文件访问)    │ 低(MODE_WORLD_*) │
+│ File Provider  │ 文件共享        │ 高(直接访问)    │ 中(临时权限)     │
+│ Broadcast      │ 事件通知        │ 低(广播开销)    │ 中(权限广播)     │
+│ Service/AIDL   │ 复杂交互        │ 高(直接调用)    │ 高(自定义)       │
+│ Shared UID     │ 同签名应用      │ 最高(同进程)    │ 取决于应用       │
+└────────────────┴─────────────────┴─────────────────┴──────────────────┘
+```
+
+选择指南：
+- **ContentProvider**：当需要共享结构化数据，支持查询和实时通知时
+- **FileProvider**：共享单个文件或文件集合，不需要结构化查询
+- **Service/AIDL**：需要复杂的方法调用和回调，而非数据CRUD
+- **Broadcast**：一对多的事件通知，不适合大数据传输
+
+### 9.1.4 系统ContentProvider实例分析
+
+Android系统内置了多个重要的ContentProvider，它们的实现展示了最佳实践：
+
+1. **MediaProvider** (`MediaStore`)
+   - 管理图片、视频、音频等媒体文件
+   - 提供缩略图生成和元数据管理
+   - Android 10后支持Scoped Storage
+   - 使用触发器维护数据一致性
+
+2. **ContactsProvider** (`ContactsContract`)
+   - 管理联系人和通话记录
+   - 支持多账户聚合
+   - 复杂的数据模型（raw contacts、data、groups）
+   - 实现了高效的全文搜索
+
+3. **CalendarProvider** (`CalendarContract`)
+   - 管理日历事件和提醒
+   - 支持同步适配器框架
+   - 处理时区和重复事件的复杂逻辑
+   - 实现了细粒度的权限控制
+
+4. **SettingsProvider** (`Settings.System/Secure/Global`)
+   - 系统设置的集中存储
+   - 分层权限控制（用户/系统/全局）
+   - 支持配置变更监听
+   - 内存缓存优化读取性能
+
+5. **TelephonyProvider**
+   - 短信（SMS）和彩信（MMS）数据管理
+   - APN（接入点）配置
+   - SIM卡信息管理
+   - 严格的权限控制
+
+这些系统Provider的共同特点：
+- 使用SQLite作为底层存储
+- 实现了复杂的数据模型和关系
+- 提供了丰富的URI scheme
+- 优化了常见查询场景
+- 支持数据变更通知
+- 实现了版本迁移机制
+
 ## 9.2 ContentProvider实现原理
 
 ### 9.2.1 进程间通信机制
@@ -183,6 +249,54 @@ public Cursor query(Uri uri, String[] projection,
    - 管理远程Cursor引用
    - 处理数据窗口的获取和缓存
    - 实现本地Cursor接口
+
+3. **跨进程Cursor架构**：
+```
+Cursor跨进程传输架构：
+┌──────────────────┐         ┌──────────────────┐
+│  Provider进程     │         │   客户端进程      │
+│                  │         │                  │
+│ SQLiteCursor     │         │ BulkCursorTo    │
+│      ↓          │         │ CursorAdaptor   │
+│ CursorWrapper    │ Binder  │      ↑          │
+│      ↓          │<------->│ IBulkCursor     │
+│ CursorToBulk    │         │                  │
+│ CursorAdaptor   │         │                  │
+│      ↓          │         │      ↓          │
+│ ┌──────────────┐│         │┌──────────────┐ │
+│ │CursorWindow  ││ ashmem  ││CursorWindow  │ │
+│ │(共享内存)     ││<------->││(共享内存)     │ │
+│ └──────────────┘│         │└──────────────┘ │
+└──────────────────┘         └──────────────────┘
+```
+
+4. **CursorWindow内存布局**：
+```
+CursorWindow内存结构：
+┌─────────────────────────────────────┐
+│          Header (元数据)             │
+├─────────────────────────────────────┤
+│ numRows │ numColumns │ freeSpace    │
+├─────────────────────────────────────┤
+│          Row Offsets Array          │
+├─────────────────────────────────────┤
+│          Field Slots Matrix         │
+│ ┌─────┬─────┬─────┬─────┐        │
+│ │slot0│slot1│slot2│slot3│ Row 0  │
+│ ├─────┼─────┼─────┼─────┤        │
+│ │slot0│slot1│slot2│slot3│ Row 1  │
+│ └─────┴─────┴─────┴─────┘        │
+├─────────────────────────────────────┤
+│          Variable Data Area         │
+│  (strings, blobs等变长数据)         │
+└─────────────────────────────────────┘
+```
+
+5. **性能优化策略**：
+   - **预填充**：Provider端预先填充多行数据
+   - **懒加载**：客户端按需请求新的Window
+   - **缓存机制**：缓存最近访问的Window
+   - **批量传输**：减少IPC调用次数
 
 ### 9.2.4 批量操作与事务支持
 
@@ -332,6 +446,75 @@ Provider级别权限
 3. **检查全局权限**：作为默认权限
 4. **检查exported属性**：是否允许外部访问
 
+### 9.3.5 权限继承与传递
+
+ContentProvider的权限可以通过多种方式传递：
+
+1. **Intent权限传递**：
+```java
+// 发送方授予权限
+Intent intent = new Intent(Intent.ACTION_SEND);
+intent.setData(contentUri);
+intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION 
+              | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+intent.putExtra(Intent.EXTRA_STREAM, contentUri);
+startActivity(intent);
+```
+
+2. **权限持久化**：
+```java
+// 接收方请求持久化权限
+int takeFlags = intent.getFlags() & 
+    (Intent.FLAG_GRANT_READ_URI_PERMISSION |
+     Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+     
+getContentResolver().takePersistableUriPermission(
+    uri, takeFlags);
+```
+
+3. **权限传递链**：
+```
+权限传递示例：
+App A (拥有者) ──授予──> App B ──传递──> App C
+     │                    │              │
+     └────────检查─────────┴──────────────┘
+```
+
+### 9.3.6 安全最佳实践
+
+URI权限模型的安全要点：
+
+1. **最小权限原则**：
+   - 只授予必要的权限（读或写）
+   - 限制权限的时间范围
+   - 使用path-permission细化控制
+
+2. **权限验证**：
+```java
+// Provider端验证调用者权限
+private void enforceCallingPermission(Uri uri) {
+    int uid = Binder.getCallingUid();
+    int pid = Binder.getCallingPid();
+    
+    // 检查是否有临时权限
+    if (getContext().checkUriPermission(uri, pid, uid,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION) 
+            != PackageManager.PERMISSION_GRANTED) {
+        throw new SecurityException("Permission denied");
+    }
+}
+```
+
+3. **防止权限泄露**：
+   - 验证URI参数，防止路径遍历
+   - 不在日志中暴露敏感URI
+   - 及时撤销不需要的权限
+
+4. **审计与监控**：
+   - 记录权限授予和访问日志
+   - 监控异常访问模式
+   - 定期审查权限配置
+
 ## 9.4 数据变更通知机制
 
 ### 9.4.1 ContentObserver实现原理
@@ -430,6 +613,78 @@ public class ContentProviderLiveData extends LiveData<Cursor> {
 }
 ```
 
+### 9.4.4 性能优化策略
+
+数据变更通知的性能优化：
+
+1. **批量通知合并**：
+```java
+public class BatchedContentProvider extends ContentProvider {
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Set<Uri> pendingNotifications = new HashSet<>();
+    private Runnable notificationRunnable;
+    
+    private void scheduleNotification(Uri uri) {
+        synchronized (pendingNotifications) {
+            pendingNotifications.add(uri);
+            if (notificationRunnable == null) {
+                notificationRunnable = () -> {
+                    synchronized (pendingNotifications) {
+                        for (Uri pendingUri : pendingNotifications) {
+                            getContext().getContentResolver()
+                                .notifyChange(pendingUri, null, false);
+                        }
+                        pendingNotifications.clear();
+                        notificationRunnable = null;
+                    }
+                };
+                handler.postDelayed(notificationRunnable, 100); // 100ms延迟
+            }
+        }
+    }
+}
+```
+
+2. **通知粒度控制**：
+   - 使用具体的URI而非通配符URI
+   - 实现分级通知策略
+   - 避免循环通知
+
+3. **观察者管理**：
+   - 弱引用防止内存泄露
+   - 及时注销不需要的观察者
+   - 限制观察者数量
+
+### 9.4.5 跨进程通知的实现细节
+
+ContentService中的通知分发机制：
+
+```
+通知分发流程：
+┌─────────────────────────────────────────────┐
+│             ContentService                   │
+│                                             │
+│  ObserverNode Tree (URI树形结构)            │
+│    /                                        │
+│   ├── content://                           │
+│   │   ├── authority1/                      │
+│   │   │   ├── path1 → [Observer1, Observer2]│
+│   │   │   └── path2 → [Observer3]          │
+│   │   └── authority2/                      │
+│   │       └── data → [Observer4, Observer5] │
+│                                             │
+│  notifyChange(uri) → 遍历树找到匹配的观察者 │
+│                                             │
+│  批量发送Binder调用到各观察者进程            │
+└─────────────────────────────────────────────┘
+```
+
+关键优化点：
+- 使用树形结构加速URI匹配
+- 批量处理跨进程调用
+- 支持同步和异步通知模式
+- 死亡通知(DeathRecipient)自动清理
+
 ## 9.5 与iOS数据共享机制对比
 
 ### 9.5.1 iOS App Groups
@@ -489,6 +744,64 @@ iOS的Document Provider Extension提供了更接近ContentProvider的功能：
 3. **iOS Document Provider**：
    - 优势：系统级UI集成
    - 劣势：仅限文档型数据、性能开销较大
+
+### 9.5.4 设计理念差异
+
+Android和iOS在数据共享设计上的根本差异：
+
+1. **开放性 vs 封闭性**：
+   - Android：任意应用间可共享（需权限）
+   - iOS：仅限同开发者或用户明确授权
+
+2. **数据模型**：
+   - Android：结构化数据优先（类SQL接口）
+   - iOS：文件和对象优先
+
+3. **权限模型**：
+   - Android：细粒度URI权限，动态授权
+   - iOS：基于entitlements和用户选择
+
+4. **生命周期管理**：
+   - Android：Provider作为独立组件，系统管理
+   - iOS：Extension进程，更严格的资源限制
+
+### 9.5.5 鸿蒙系统的数据共享机制
+
+鸿蒙系统(HarmonyOS)提供了独特的数据共享方案：
+
+1. **分布式数据服务**：
+```
+鸿蒙分布式数据架构：
+┌─────────────────────────────────────┐
+│        分布式数据服务                │
+│  ┌─────────┐  ┌─────────┐         │
+│  │设备A应用 │  │设备B应用 │         │
+│  └────┬────┘  └────┬────┘         │
+│       │            │               │
+│  ┌────┴────────────┴────┐         │
+│  │ 分布式数据库API      │         │
+│  └──────────┬───────────┘         │
+│             │                      │
+│  ┌──────────┴───────────┐         │
+│  │  同步与冲突解决       │         │
+│  └──────────────────────┘         │
+└─────────────────────────────────────┘
+```
+
+2. **DataAbility（类似ContentProvider）**：
+   - 统一的数据访问接口
+   - 支持跨设备数据同步
+   - 原生分布式能力
+
+3. **权限管控**：
+   - 基于ACL的访问控制
+   - 支持跨设备权限同步
+   - 用户隐私优先
+
+对比要点：
+- 鸿蒙原生支持跨设备数据共享
+- 更强调分布式场景
+- 权限模型更复杂但更灵活
 
 ## 9.6 高级特性与优化
 
@@ -557,6 +870,110 @@ public Cursor query(Uri uri, String[] projection,
 }
 ```
 
+### 9.6.4 异步查询模式
+
+实现高性能的异步查询：
+
+1. **使用CursorLoader**：
+```java
+// 在Activity/Fragment中使用
+LoaderManager.LoaderCallbacks<Cursor> callbacks = 
+    new LoaderManager.LoaderCallbacks<Cursor>() {
+        @Override
+        public Loader<Cursor> onCreateLoader(int id, Bundle args) {
+            return new CursorLoader(
+                context,
+                uri,
+                projection,
+                selection,
+                selectionArgs,
+                sortOrder
+            );
+        }
+        
+        @Override
+        public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+            // 处理查询结果
+        }
+    };
+```
+
+2. **使用AsyncQueryHandler**：
+```java
+AsyncQueryHandler queryHandler = new AsyncQueryHandler(contentResolver) {
+    @Override
+    protected void onQueryComplete(int token, Object cookie, Cursor cursor) {
+        // 处理查询结果
+    }
+};
+
+queryHandler.startQuery(
+    token,
+    cookie,
+    uri,
+    projection,
+    selection,
+    selectionArgs,
+    sortOrder
+);
+```
+
+3. **协程支持（Kotlin）**：
+```kotlin
+suspend fun queryAsync(uri: Uri): List<Data> = withContext(Dispatchers.IO) {
+    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+        cursor.mapToList { it.toData() }
+    } ?: emptyList()
+}
+```
+
+### 9.6.5 缓存策略设计
+
+高效的ContentProvider缓存实现：
+
+```java
+public class CachedContentProvider extends ContentProvider {
+    private final LruCache<Uri, CacheEntry> cache = new LruCache<>(100);
+    
+    private static class CacheEntry {
+        final Cursor cursor;
+        final long timestamp;
+        
+        CacheEntry(Cursor cursor) {
+            this.cursor = cursor;
+            this.timestamp = SystemClock.elapsedRealtime();
+        }
+        
+        boolean isExpired() {
+            return SystemClock.elapsedRealtime() - timestamp > 60000; // 60秒
+        }
+    }
+    
+    @Override
+    public Cursor query(Uri uri, String[] projection, ...) {
+        // 检查缓存
+        CacheEntry entry = cache.get(uri);
+        if (entry != null && !entry.isExpired()) {
+            return new CachedCursor(entry.cursor);
+        }
+        
+        // 执行查询
+        Cursor cursor = performQuery(uri, projection, ...);
+        
+        // 更新缓存
+        cache.put(uri, new CacheEntry(cursor));
+        
+        return cursor;
+    }
+}
+```
+
+缓存策略要点：
+- 使用LRU缓存限制内存使用
+- 设置合理的过期时间
+- 监听数据变更自动失效缓存
+- 考虑多级缓存（内存+磁盘）
+
 ## 9.7 安全考虑
 
 ### 9.7.1 SQL注入防护
@@ -615,6 +1032,88 @@ private void validateUri(Uri uri) {
 3. **数据最小化**：
    - 仅返回必要字段
    - 实施数据脱敏
+
+### 9.7.4 安全编码实践
+
+ContentProvider安全开发指南：
+
+1. **输入验证**：
+```java
+private void validateInput(Uri uri, ContentValues values) {
+    // URI验证
+    if (!isValidUri(uri)) {
+        throw new IllegalArgumentException("Invalid URI");
+    }
+    
+    // 参数验证
+    for (String key : values.keySet()) {
+        Object value = values.get(key);
+        if (!isValidValue(key, value)) {
+            throw new IllegalArgumentException("Invalid value for " + key);
+        }
+    }
+}
+```
+
+2. **权限分离**：
+```java
+public class SecureContentProvider extends ContentProvider {
+    // 分离读写操作的权限检查
+    private static final String READ_PERMISSION = "com.example.READ";
+    private static final String WRITE_PERMISSION = "com.example.WRITE";
+    
+    @Override
+    public Cursor query(Uri uri, ...) {
+        enforcePermission(READ_PERMISSION, uri);
+        return super.query(uri, ...);
+    }
+    
+    @Override
+    public Uri insert(Uri uri, ContentValues values) {
+        enforcePermission(WRITE_PERMISSION, uri);
+        validateInput(uri, values);
+        return super.insert(uri, values);
+    }
+}
+```
+
+3. **安全的文件操作**：
+```java
+@Override
+public ParcelFileDescriptor openFile(Uri uri, String mode) 
+        throws FileNotFoundException {
+    // 验证文件路径，防止路径遍历
+    File file = getFileForUri(uri);
+    String canonicalPath = file.getCanonicalPath();
+    if (!canonicalPath.startsWith(getFilesDir().getCanonicalPath())) {
+        throw new SecurityException("Access denied");
+    }
+    
+    // 检查文件访问权限
+    enforceFilePermission(uri, mode);
+    
+    return ParcelFileDescriptor.open(file, parseMode(mode));
+}
+```
+
+### 9.7.5 隐私合规考虑
+
+ContentProvider的隐私保护措施：
+
+1. **数据最小化原则**：
+   - 仅收集必要数据
+   - 定期清理过期数据
+   - 提供数据删除接口
+
+2. **用户控制**：
+   - 提供数据导出功能
+   - 支持选择性数据共享
+   - 实现数据删除请求
+
+3. **透明度**：
+   - 记录数据访问日志
+   - 提供数据使用说明
+   - 通知用户数据共享行为
 
 ## 本章小结
 
