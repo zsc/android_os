@@ -21,21 +21,29 @@ Keystore系统采用分层架构设计，从上到下包括：
 - KeyStore类：Java层API入口，提供密钥的生成、导入、使用接口
 - KeyGenerator/KeyPairGenerator：密钥生成器，支持对称和非对称密钥
 - Cipher/Signature：加密和签名操作接口
+- KeyChain API：系统级密钥和证书管理，支持用户选择证书
+- Android Keystore Provider：集成到Java Cryptography Architecture (JCA)
 
 **系统服务层**
 - keystore守护进程：运行在独立进程中，管理密钥存储和访问控制
 - KeystoreService：Binder服务接口，处理应用请求
 - 密钥数据库：使用加密的SQLite存储密钥元数据
+- 权限管理：基于UID的访问控制，SELinux策略增强
+- 密钥别名命名空间：防止应用间密钥冲突
 
 **HAL层**
 - Keymaster HAL：硬件抽象层接口，定义标准密钥操作
 - IKeymasterDevice：HIDL/AIDL接口定义
 - 厂商实现：对接具体硬件安全模块
+- HAL版本兼容：支持多版本Keymaster共存
+- RemotelyProvisionedComponent：远程密钥配置支持
 
 **硬件层**
 - TEE实现：在可信执行环境中运行的Keymaster TA
 - 独立安全芯片：如Titan M等专用安全处理器
 - SoC集成方案：集成在主SoC中的安全子系统
+- 硬件密钥派生：基于芯片唯一密钥（HUK）
+- 安全存储：RPMB或独立闪存
 
 ### 密钥存储机制
 
@@ -45,11 +53,15 @@ Android支持多种密钥存储后端：
 - 使用keystore守护进程的主密钥加密
 - 存储在/data/misc/keystore目录
 - 主密钥派生自用户凭据（PIN/密码/图案）
+- AES-GCM加密保护密钥材料
+- 每用户独立的加密密钥
 
 **硬件密钥存储**
 - 密钥材料永不离开安全硬件
 - 仅返回密钥句柄（key blob）给系统
 - 支持密钥使用限制（如需要用户认证）
+- 密钥操作通过HAL调用在安全环境执行
+- 支持密钥包装导出（仅限特定场景）
 
 **密钥Blob格式**
 ```
@@ -59,8 +71,18 @@ KeyBlob {
     auth_tags: AuthorizationSet,
     hw_enforced: AuthorizationSet,
     sw_enforced: AuthorizationSet,
+    nonce: [u8; 12],  // GCM nonce
+    tag: [u8; 16],    // GCM authentication tag
 }
 ```
+
+**密钥特征（Key Characteristics）**
+- Algorithm：支持RSA、EC、AES、HMAC等
+- KeySize：密钥长度限制
+- Digest：支持的哈希算法
+- Padding：填充模式
+- Purpose：加密/解密/签名/验证
+- UserAuthenticationType：指纹/面部/PIN
 
 ### 密钥生命周期管理
 
@@ -70,18 +92,31 @@ KeyBlob {
 3. 通过HAL调用硬件Keymaster
 4. 在TEE/安全芯片中生成密钥
 5. 返回加密的key blob存储
+6. 更新密钥数据库元数据
+7. 触发密钥生成审计日志
 
 **密钥使用授权**
 - 用户认证绑定：requireUserAuthentication()
 - 时间限制：setUserAuthenticationValidityDurationSeconds()
 - 生物识别绑定：setUserAuthenticationRequired()
 - 安全锁屏绑定：setUnlockedDeviceRequired()
+- 应用绑定：setUid()限制调用者UID
+- 有效期限制：setKeyValidityStart/End()
+- 使用次数限制：setMaxUsageCount()
 
 **密钥销毁机制**
 - 显式删除：KeyStore.deleteEntry()
 - 应用卸载自动清理
 - 用户数据擦除
 - 硬件密钥的安全擦除保证
+- 密钥过期自动失效
+- 设备恢复出厂设置时的完全清除
+
+**密钥迁移与备份**
+- 密钥不可导出原则
+- 云备份排除：android:allowBackup="false"
+- 密钥恢复机制：通过密钥派生而非直接备份
+- 设备间迁移：使用密钥协商协议
 
 ### 与iOS Keychain对比
 
@@ -93,6 +128,9 @@ KeyBlob {
 | 访问控制 | 基于UID和别名 | 基于entitlement |
 | 云同步 | 不支持 | iCloud Keychain |
 | 密钥认证 | Key Attestation | DeviceCheck |
+| 跨应用共享 | 通过KeyChain API | Keychain Access Groups |
+| 密钥迁移 | 不支持直接迁移 | iCloud同步迁移 |
+| 默认安全级别 | 可选软/硬件 | 默认Secure Enclave |
 
 ### Keystore安全特性
 
@@ -100,16 +138,29 @@ KeyBlob {
 - 进程级隔离：每个应用只能访问自己的密钥
 - 用户级隔离：多用户环境下密钥完全隔离
 - 密钥别名命名空间：防止密钥名称冲突
+- 工作资料隔离：个人和工作密钥分开管理
+- SELinux上下文隔离：增强访问控制
 
 **防回滚保护**
 - 密钥版本控制
 - 单调计数器防止降级攻击
 - 与Verified Boot集成
+- RPMB存储回滚索引
+- 密钥更新时的旧版本失效
 
 **侧信道防护**
 - 时间恒定的密码学实现
 - 功耗分析防护
 - 电磁泄露防护（硬件相关）
+- 缓存时序攻击防护
+- 内存访问模式混淆
+- 随机延迟和假操作插入
+
+**运行时安全检查**
+- 密钥使用频率限制
+- 异常操作模式检测
+- 密钥访问审计日志
+- 失败重试限制
 
 ## Trusty TEE架构
 
@@ -122,11 +173,22 @@ KeyBlob {
 - 内存隔离：TZASC（TrustZone Address Space Controller）
 - 中断隔离：安全中断和非安全中断分离
 - 外设隔离：安全外设只能被安全世界访问
+- 缓存隔离：L1/L2缓存标记安全属性
+- 总线安全：AXI总线传输安全位
 
 **TEE与REE通信**
 - SMC（Secure Monitor Call）指令触发世界切换
 - 共享内存用于数据传递
 - RPC（Remote Procedure Call）机制
+- 世界切换开销：约数百个CPU周期
+- 异步通知机制：FIQ中断
+
+**安全监控器（Secure Monitor）**
+- EL3特权级运行
+- 管理世界切换
+- 保存/恢复上下文
+- 处理SMC调用
+- 维护安全配置寄存器
 
 ### Trusty OS设计
 
@@ -137,12 +199,23 @@ Google开发的Trusty是Android推荐的TEE操作系统：
 - 用户空间隔离：每个TA运行在独立地址空间
 - IPC机制：基于端口的进程间通信
 - 调度器：支持多任务和优先级调度
+- 内存管理：页表隔离、堆栈保护
+- 异常处理：安全的异常捕获和处理
 
 **Trusty应用框架**
 - libtrusty：核心运行时库
 - 存储服务：安全文件系统
 - 密码学服务：硬件加速的密码学操作
 - IPC服务：与普通世界通信
+- 时钟服务：安全时钟和定时器
+- 随机数服务：硬件真随机数
+
+**Trusty应用开发**
+- C/C++语言支持
+- 最小运行时库
+- 无标准库依赖
+- 静态链接二进制
+- 严格内存限制
 
 ### Keymaster TA实现
 
@@ -152,26 +225,43 @@ Keymaster是Trusty中最重要的可信应用：
 ```
 Keymaster TA
 ├── 密钥生成模块
-│   ├── RSA密钥生成
-│   ├── ECC密钥生成
-│   └── AES密钥生成
+│   ├── RSA密钥生成 (2048/3072/4096位)
+│   ├── ECC密钥生成 (P-256/P-384/P-521)
+│   ├── AES密钥生成 (128/256位)
+│   └── HMAC密钥生成
 ├── 密钥存储模块
 │   ├── 密钥加密/解密
 │   ├── 密钥导入/导出
-│   └── 密钥元数据管理
+│   ├── 密钥元数据管理
+│   └── 密钥版本控制
 ├── 密码学操作模块
-│   ├── 加密/解密
-│   ├── 签名/验证
-│   └── 密钥协商
-└── 认证模块
-    ├── 密钥认证生成
-    └── 使用授权验证
+│   ├── 加密/解密 (AES-GCM/CBC/CTR/ECB)
+│   ├── 签名/验证 (RSA-PSS/PKCS#1, ECDSA)
+│   ├── 密钥协商 (ECDH, DH)
+│   └── 消息认证 (HMAC-SHA256/512)
+├── 认证模块
+│   ├── 密钥认证生成
+│   ├── 使用授权验证
+│   └── 设备ID认证
+└── 安全服务
+    ├── 随机数生成 (TRNG)
+    ├── 安全时钟
+    └── 防回滚计数器
 ```
 
 **安全密钥存储**
 - RPMB（Replay Protected Memory Block）：防重放的安全存储
 - 密钥加密密钥（KEK）：由硬件唯一密钥派生
 - 密钥分层：主密钥→密钥加密密钥→实际密钥
+- 密钥派生函数：HKDF-SHA256
+- 加密算法：AES-256-GCM
+
+**Keymaster命令处理**
+- 命令验证和解析
+- 参数完整性检查
+- 权限验证
+- 操作执行
+- 结果加密返回
 
 ### Gatekeeper TA
 
@@ -190,13 +280,33 @@ Gatekeeper负责用户凭据验证：
 
 ### 其他TEE方案对比
 
-| TEE方案 | 特点 | 应用场景 |
-|---------|------|----------|
-| Trusty | Google开发，开源 | Pixel设备 |
-| QSEE | 高通方案，闭源 | 骁龙平台 |
-| TrustedCore | 华为方案 | 麒麟平台 |
-| Kinibi | 三星方案 | Exynos平台 |
-| OP-TEE | 开源参考实现 | 开发测试 |
+| TEE方案 | 特点 | 应用场景 | 安全特性 |
+|---------|------|----------|------------|
+| Trusty | Google开发，开源 | Pixel设备 | 微内核、完全隔离 |
+| QSEE | 高通方案，闭源 | 骁龙平台 | 丰富的TA生态 |
+| TrustedCore | 华为方案 | 麒麟平台 | 形式化验证 |
+| Kinibi | 三星方案 | Exynos平台 | 实时操作系统 |
+| OP-TEE | 开源参考实现 | 开发测试 | GlobalPlatform标准 |
+
+**各方案技术差异**
+
+QSEE（Qualcomm Secure Execution Environment）：
+- 基于L4微内核
+- 支持动态TA加载
+- 集成Crypto Engine
+- 支持DRM保护
+
+TrustedCore：
+- 华为自研微内核
+- 形式化方法验证
+- CC EAL5+认证
+- 支持多级安全等级
+
+Kinibi（t-base）：
+- 实时操作系统设计
+- 高性能优化
+- 小内存占用
+- 快速上下文切换
 
 ## 硬件密钥认证
 
@@ -219,6 +329,13 @@ Key Attestation生成一个X.509证书链：
 2. **中间证书**：设备特定的认证密钥证书
 3. **根证书**：Google硬件认证根证书
 
+**证书验证路径**
+```
+用户密钥证书 ← 设备中间证书 ← Google根证书
+    ↓                ↓                ↓
+ 签名验证         签名验证       信任锚
+```
+
 **认证扩展结构**
 ```
 KeyDescription ::= SEQUENCE {
@@ -232,6 +349,12 @@ KeyDescription ::= SEQUENCE {
     teeEnforced AuthorizationList,
 }
 
+SecurityLevel ::= ENUMERATED {
+    Software(0),
+    TrustedEnvironment(1),
+    StrongBox(2),
+}
+
 AuthorizationList ::= SEQUENCE {
     purpose [1] EXPLICIT SET OF INTEGER OPTIONAL,
     algorithm [2] EXPLICIT INTEGER OPTIONAL,
@@ -241,7 +364,26 @@ AuthorizationList ::= SEQUENCE {
     ecCurve [10] EXPLICIT INTEGER OPTIONAL,
     rsaPublicExponent [200] EXPLICIT INTEGER OPTIONAL,
     rollbackResistance [303] EXPLICIT NULL OPTIONAL,
+    activeDateTime [400] EXPLICIT INTEGER OPTIONAL,
+    originationExpireDateTime [401] EXPLICIT INTEGER OPTIONAL,
+    usageExpireDateTime [402] EXPLICIT INTEGER OPTIONAL,
+    userAuthType [504] EXPLICIT INTEGER OPTIONAL,
+    authTimeout [505] EXPLICIT INTEGER OPTIONAL,
+    allowWhileOnBody [506] EXPLICIT NULL OPTIONAL,
+    trustedUserPresenceRequired [507] EXPLICIT NULL OPTIONAL,
+    trustedConfirmationRequired [508] EXPLICIT NULL OPTIONAL,
+    unlockedDeviceRequired [509] EXPLICIT NULL OPTIONAL,
+    creationDateTime [701] EXPLICIT INTEGER OPTIONAL,
+    origin [702] EXPLICIT INTEGER OPTIONAL,
     rootOfTrust [704] EXPLICIT RootOfTrust OPTIONAL,
+    osVersion [705] EXPLICIT INTEGER OPTIONAL,
+    osPatchLevel [706] EXPLICIT INTEGER OPTIONAL,
+    attestationApplicationId [709] EXPLICIT OCTET STRING OPTIONAL,
+    attestationIdBrand [710] EXPLICIT OCTET STRING OPTIONAL,
+    attestationIdDevice [711] EXPLICIT OCTET STRING OPTIONAL,
+    attestationIdProduct [712] EXPLICIT OCTET STRING OPTIONAL,
+    vendorPatchLevel [718] EXPLICIT INTEGER OPTIONAL,
+    bootPatchLevel [719] EXPLICIT INTEGER OPTIONAL,
     ...
 }
 ```
@@ -260,11 +402,32 @@ AuthorizationList ::= SEQUENCE {
 3. 解析认证扩展
 4. 验证挑战值匹配
 5. 检查设备安全属性
+6. 验证时间戳新鲜度
+7. 检查密钥使用限制
 
 **关键API调用**
 - setAttestationChallenge()：设置挑战值
 - generateKeyPair()：生成密钥对并认证
 - getCertificateChain()：获取认证证书链
+- setIsStrongBoxBacked()：指定使用StrongBox
+- setDevicePropertiesAttestationIncluded()：包含设备属性
+
+**认证结果解析**
+```java
+// 解析认证扩展
+AttestationExtension ext = parseAttestationExtension(cert);
+
+// 验证安全级别
+if (ext.attestationSecurityLevel == SecurityLevel.StrongBox) {
+    // 最高安全级别
+} else if (ext.attestationSecurityLevel == SecurityLevel.TrustedEnvironment) {
+    // TEE级别安全
+}
+
+// 检查硬件强制属性
+AuthorizationList hwEnforced = ext.teeEnforced;
+verifyHardwareEnforcedProperties(hwEnforced);
+```
 
 ### Root of Trust验证
 
@@ -293,6 +456,34 @@ VerifiedBootState ::= ENUMERATED {
 - Unverified：未启用verified boot
 - Failed：系统完整性验证失败
 
+**验证实践**
+```
+// 服务端验证逻辑
+RootOfTrust rot = attestation.getRootOfTrust();
+
+// 检查设备锁定状态
+if (!rot.deviceLocked) {
+    // 设备已解锁，降低信任度
+}
+
+// 检查启动状态
+switch (rot.verifiedBootState) {
+    case Verified:
+        // 完全可信
+        break;
+    case SelfSigned:
+        // 开发者设备，需要额外验证
+        break;
+    case Unverified:
+    case Failed:
+        // 不可信，拒绝服务
+        break;
+}
+
+// 验证启动密钥哈希
+verifyBootKeyHash(rot.verifiedBootKey);
+```
+
 ### SafetyNet/Play Integrity API
 
 除了Key Attestation，Android还提供应用级的设备认证：
@@ -308,6 +499,8 @@ VerifiedBootState ::= ENUMERATED {
 - 应用完整性验证
 - 账号真实性检查
 - 设备活动风险评估
+- 实时环境检测
+- 反作弊机制
 
 **集成要点**
 ```
@@ -316,7 +509,18 @@ VerifiedBootState ::= ENUMERATED {
 2. 基本完整性：可能已root但未主动攻击
 3. 应用完整性：APK未被篡改
 4. 账号可信度：非机器人账号
+5. 环境安全性：无屏幕录制、辅助服务
 ```
+
+**API差异对比**
+| 特性 | SafetyNet | Play Integrity |
+|------|-----------|----------------|
+| 发布时间 | 2013 | 2021 |
+| 状态 | 已弃用 | 推荐使用 |
+| 检测范围 | 设备状态 | 设备+应用+环境 |
+| 防篡改 | 中等 | 强 |
+| 性能影响 | 较大 | 优化 |
+| API限制 | 无 | 有配额限制 |
 
 ### StrongBox Keymaster
 
@@ -327,6 +531,8 @@ Android 9引入StrongBox，提供更高安全级别：
 - 独立的CPU、内存、存储
 - 真随机数生成器
 - 侧信道攻击防护
+- 物理攻击检测
+- 安全元件认证（CC EAL4+）
 
 **与TEE Keymaster对比**
 | 特性 | TEE Keymaster | StrongBox |
@@ -336,6 +542,19 @@ Android 9引入StrongBox，提供更高安全级别：
 | 抗物理攻击 | 有限 | 强 |
 | 成本 | 低 | 高 |
 | 支持算法 | 完整 | 有限 |
+| 典型实现 | ARM TrustZone | Titan M/SE |
+
+**StrongBox限制**
+- RSA：仅2048位
+- ECC：仅P-256曲线  
+- AES：128/256位
+- 性能：签名操作约50ms
+- 存储：有限的密钥数量
+
+**使用场景建议**
+- 高价值密钥：使用StrongBox
+- 频繁操作：使用TEE Keymaster
+- 混合模式：根密钥在StrongBox，工作密钥在TEE
 
 ### 与iOS对比
 
