@@ -73,20 +73,47 @@ Android使用定制的Linux内核，理解内核修改对深入掌握Android至�
 **Android内核特性文档：**
 - Binder IPC：进程间通信的内核驱动实现
   - 内存映射机制：一次拷贝的实现原理
+    - mmap系统调用：在用户空间映射内核缓冲区，避免数据的多次拷贝
+    - binder_alloc：管理每个进程的Binder内存池，支持动态分配和回收
+    - 物理页管理：使用LRU算法管理物理内存页，优化内存使用效率
   - 线程池管理：binder线程的创建和调度
+    - BC_REGISTER_LOOPER：线程注册为Binder工作线程的机制
+    - 线程优先级继承：避免优先级反转问题，确保高优先级任务及时响应
+    - 线程池大小控制：默认最大15个线程，可通过属性调整
   - 死亡通知：进程异常退出的处理机制
-- ION内存分配器：统一的内存管理框架
+    - death recipient：监听远程对象死亡的回调机制
+    - 清理流程：自动清理死亡进程的Binder引用和资源
+    - 防止泄漏：确保系统资源在进程异常退出时得到释放
+- ION内存分配器：统一的内存管理框架（注：Android 14开始使用DMA-BUF heaps）
   - Heap类型：system、carveout、cma等heap的区别
+    - System heap：从系统内存池分配，最通用但可能有碎片
+    - Carveout heap：预留的连续物理内存，适合硬件访问
+    - CMA heap：连续内存分配器，动态分配大块连续内存
+    - Secure heap：TEE保护的安全内存，用于DRM等场景
   - Buffer共享：dmabuf的集成使用
+    - fd传递：通过文件描述符在进程间共享buffer
+    - 引用计数：自动管理buffer生命周期
+    - CPU/设备同步：fence机制确保访问同步
   - 与GPU/Display的集成：零拷贝的实现
+    - Gralloc HAL：图形内存分配的标准接口
+    - HWComposer集成：直接将ION buffer用于显示合成
+    - GPU纹理映射：避免CPU-GPU间的数据拷贝
 - 电源管理增强：
-  - Wakelock机制：防止系统休眠的实现(已废弃)
+  - Wakelock机制：防止系统休眠的实现(已废弃，被Wake Sources取代)
+    - 历史问题：用户空间滥用导致功耗问题
+    - 迁移方案：使用JobScheduler、WorkManager等替代
   - Wake Sources：新的电源管理接口
+    - autosleep机制：系统自动进入低功耗状态
+    - suspend blocker：内核级的休眠阻止机制
+    - 统计功能：详细的唤醒源统计信息
   - CPU调频调压：EAS(Energy Aware Scheduling)集成
+    - schedutil调频器：基于调度器负载的动态调频
+    - 能效模型：考虑CPU簇的能效差异进行任务分配
+    - thermal压力：温度限制下的性能调整
 
 ### 32.1.3 开发者文档体系
 
-Google为不同层次的开发者提供了完整的文档体系：
+Google为不同层次的开发者提供了完整的文档体系，从应用开发到系统定制，覆盖了Android生态的各个层面：
 
 **应用开发文档：**
 - developer.android.com：应用开发主站
@@ -135,22 +162,74 @@ Google为不同层次的开发者提供了完整的文档体系：
 **专项技术文档：**
 - 图形系统文档：
   - SurfaceFlinger架构：显示合成的实现原理
+    - Layer管理：应用窗口的分层渲染机制
+    - VSYNC编排：Choreographer与SF的同步机制
+    - 合成策略选择：Client合成vs Device合成的决策算法
+    - 性能追踪：使用systrace分析渲染管线
   - Vulkan集成：现代图形API的支持
+    - 层加载机制：validation layers的动态加载
+    - 内存管理：VkDeviceMemory与Android内存的映射
+    - Swapchain实现：与ANativeWindow的集成
+    - 扩展支持：Android特定扩展如VK_ANDROID_external_memory_android_hardware_buffer
   - HDR显示：高动态范围的实现要求
+    - 色彩空间：支持BT.2020、DCI-P3等广色域
+    - 传输函数：PQ(ST.2084)和HLG的实现
+    - 元数据传递：静态(HDR10)和动态(HDR10+、Dolby Vision)元数据
+    - 色调映射：将HDR内容适配到SDR显示器
 - 音频系统文档：
   - AudioFlinger设计：音频混音和路由机制
+    - PlaybackThread：音频播放线程的处理流程
+    - RecordThread：音频录制的缓冲区管理
+    - MixerThread：多路音频流的实时混音算法
+    - DirectOutputThread：绕过混音器的低延迟输出
   - 音效框架：音频效果的插件架构
+    - EffectChain：音效处理链的组织方式
+    - OpenSL ES集成：标准音效API的Android实现
+    - 预处理效果：AEC(回声消除)、NS(噪声抑制)、AGC(自动增益)
+    - 后处理效果：均衡器、虚拟化器、低音增强
   - 低延迟音频：专业音频应用的支持
+    - AAUDIO API：低延迟音频的现代接口
+    - FastMixer：独立的高优先级混音线程
+    - 性能模式：AAUDIO_PERFORMANCE_MODE_LOW_LATENCY
+    - 缓冲区调优：根据硬件能力动态调整
 - 相机系统文档：
   - Camera2 API：现代相机框架的设计
+    - 管道模型：基于请求-结果的异步处理模型
+    - CaptureRequest：精细的参数控制能力
+    - CameraCharacteristics：硬件能力查询接口
+    - Session管理：Surface配置和流管理
   - HAL3规范：相机硬件抽象层接口
+    - 3A算法接口：AE/AF/AWB的标准化控制
+    - 元数据系统：使用tag-based的扩展机制
+    - Stream配置：多路输出流的配置和管理
+    - 错误处理：设备错误和请求错误的处理流程
   - 多摄像头支持：逻辑相机的实现
+    - 物理相机ID：识别逻辑相机背后的物理传感器
+    - 同步控制：多相机的帧同步机制
+    - 焦距覆盖：广角、标准、长焦的无缝切换
+    - 计算摄影：多帧合成、HDR、夜景模式的框架支持
+- 连接性文档：
+  - Wi-Fi架构：从应用到驱动的完整栈
+    - WifiManager API：应用层的Wi-Fi控制接口
+    - wpa_supplicant：WPA认证的核心组件
+    - HAL接口：IWifi HIDL/AIDL定义
+    - 省电优化：Doze模式下的Wi-Fi策略
+  - 蓝牙栈实现：Fluoride(原Bluedroid)架构
+    - HCI层：主机控制器接口的抽象
+    - GATT/GAP：低功耗蓝牙的核心协议
+    - 音频路由：A2DP、HFP的实现机制
+    - Gabeldorsche：新一代蓝牙栈(Android 13+)
+  - NFC框架：近场通信的系统集成
+    - NFCC接口：NFC控制器的硬件抽象
+    - 卡模拟：HCE(Host Card Emulation)实现
+    - P2P模式：Android Beam的底层机制(已废弃)
+    - 标签调度：前台应用的NFC事件分发
 
 ## 32.2 开源项目推荐
 
 ### 32.2.1 系统框架相关项目
 
-深入研究这些开源项目可以更好地理解Android系统的实现细节：
+深入研究这些开源项目可以更好地理解Android系统的实现细节。这些项目不仅是Android的核心组成部分，也是学习系统级编程的优秀范例：
 
 **核心框架项目：**
 - platform/frameworks/base：Android框架层核心代码
@@ -199,16 +278,50 @@ Google为不同层次的开发者提供了完整的文档体系：
 **其他重要项目：**
 - platform/packages：系统应用和服务
   - SystemUI：状态栏、导航栏、通知系统
+    - StatusBar：状态栏的实现，包括通知面板、快速设置
+    - NavigationBar：导航栏实现，支持手势导航和按钮导航
+    - Recents：最近任务视图，集成了任务快照机制
+    - 键盘输入法弹出管理：IME窗口的显示和隐藏逻辑
   - Settings：系统设置应用
+    - PreferenceController架构：模块化的设置项管理
+    - 搜索功能：基于SQLite的设置项索引
+    - 动态加载：根据设备特性动态显示设置项
+    - 多用户支持：不同用户的设置隔离
   - Launcher3：默认桌面启动器
+    - 工作空间管理：CellLayout的网格布局算法
+    - 应用抽屉：AlphabeticalAppsList的实现
+    - 拖拽机制：DragController的跨视图拖拽
+    - 小部件系统：AppWidget的托管和渲染
   - PackageInstaller：应用安装器
+    - 安装会话：PackageInstallerSession的状态管理
+    - APK验证：签名验证、权限检查
+    - 分段安装：支持大型APK的分段传输
+    - 用户确认UI：权限请求的展示逻辑
 - platform/external：第三方开源项目
   - chromium-webview：WebView实现
+    - 渲染引擎：Blink内核的Android适配
+    - 进程模型：独立进程渲染的安全隔离
+    - JavaScript桥接：Java和JS的互操作机制
+    - 缓存策略：HTTP缓存和资源缓存管理
   - conscrypt：TLS/SSL实现
+    - JCA Provider：Java密码学架构的实现
+    - Native加速：使用BoringSSL提供高性能加密
+    - 证书管理：Android系统证书库的集成
+    - ALPN/NPN：HTTP/2协商支持
   - sqlite：数据库引擎
+    - 事务管理：WAL(Write-Ahead Logging)模式
+    - 全文搜索：FTS5扩展的集成
+    - 加密支持：SQLCipher的可选集成
+    - Android特定优化：针对移动设备的性能调优
   - toybox：命令行工具集
+    - 单一二进制：所有工具合并成一个可执行文件
+    - Android特定命令：getprop、setprop、logcat等
+    - 轻量级实现：比busybox更小的体积
+    - 模块化设计：可配置的工具集编译
 
 ### 32.2.2 工具链项目
+
+工具链是Android开发生态的重要组成部分，从开发、构建到调试、分析，每个环节都有专门的工具支持：
 
 **开发工具：**
 - Android Studio：官方IDE，包含大量分析工具
@@ -264,16 +377,44 @@ Google为不同层次的开发者提供了完整的文档体系：
 **调试工具：**
 - GDB/LLDB：Native代码调试
   - 远程调试：gdbserver支持
+    - 启动方式：gdbserver :5039 /system/bin/surfaceflinger
+    - 连接方法：target remote :5039
+    - 端口转发：adb forward tcp:5039 tcp:5039
   - 符号解析：自动加载符号文件
+    - 符号路径设置：set solib-search-path
+    - 远程符号服务器：debuginfod支持
+    - 分离符号：.debug文件的使用
   - Python扩展：自定义调试脚本
+    - Pretty Printer：美化STL容器输出
+    - 断点脚本：条件断点的复杂逻辑
+    - 内存分析：自动化内存泄漏检测
 - Sanitizers：内存和行为检测
   - AddressSanitizer：检测内存错误
+    - 堆溢出检测：red zone保护机制
+    - Use-after-free：释放后使用检测
+    - 栈溢出：栈变量边界检查
+    - 性能开销：约2-3倍慢于正常执行
   - ThreadSanitizer：检测数据竞争
+    - 竞争检测算法：happens-before关系分析
+    - 锁分析：死锁和锁顺序检查
+    - 报告生成：详细的竞争现场信息
   - UndefinedBehaviorSanitizer：检测未定义行为
+    - 整数溢出：有符号/无符号溢出
+    - 空指针解引用：运行时检查
+    - 类型转换错误：动态类型检查
 - Valgrind：内存泄漏检测
   - Memcheck：内存错误检测
+    - 泄漏分类：确定性泄漏、可能泄漏
+    - 栈跟踪：完整的分配调用栈
+    - 抑制文件：过滤已知的无害泄漏
   - Callgrind：函数调用分析
+    - 指令级分析：精确到每条指令
+    - 缓存模拟：L1/L2缓存命中率
+    - KCacheGrind：可视化分析工具
   - Massif：堆内存分析
+    - 快照机制：定期记录堆使用情况
+    - 峰值检测：找出内存使用峰值
+    - 分配树：展示内存分配的调用关系
 
 ### 32.2.3 安全研究项目
 
@@ -515,6 +656,8 @@ Google为不同层次的开发者提供了完整的文档体系：
 
 ### 32.3.3 安全工具和框架
 
+安全工具是保障Android系统和应用安全的重要手段。从静态代码分析到动态运行时检测，再到漏洞挖掘和验证，每个阶段都有专业的工具支持：
+
 **静态分析工具：**
 - Android Lint：代码质量检查
   - 安全规则：检测常见安全问题
@@ -562,19 +705,66 @@ Google为不同层次的开发者提供了完整的文档体系：
 **漏洞挖掘框架：**
 - syzkaller：内核模糊测试
   - 系统调用描述：syzlang语言
+    - 语法结构：描述syscall参数和约束
+    - 资源依赖：定义资源间的依赖关系
+    - Android特定：Binder、ION等特有syscall
   - 崩溃重现：最小化测试用例
+    - C repro：生成可独立运行的C代码
+    - 去噪处理：移除无关的syscall
+    - 确定性保证：可重复触发漏洞
   - 分布式执行：多机并行测试
+    - syz-manager：中心管理节点
+    - syz-fuzzer：工作节点执行器
+    - 负载均衡：动态分配测试任务
   - 报告系统：崩溃分类和管理
+    - 崩溃去重：基于调用栈的相似度
+    - 优先级排序：根据影响和可利用性
+    - 自动二分：定位引入漏洞的commit
 - LibFuzzer：LLVM的模糊测试库
   - 内存安全：与ASan集成
+    - 堆缓冲区溢出：实时检测
+    - UAF检测：延迟释放机制
+    - 内存泄漏：LeakSanitizer集成
   - 覆盖率导向：SanitizerCoverage
+    - 边覆盖：基本块边的覆盖率
+    - 函数覆盖：函数级别的覆盖
+    - 比较跟踪：__sanitizer_cov_trace_cmp
   - 字典支持：自定义输入字典
+    - Token字典：关键字和常量
+    - 结构化输入：Protobuf、JSON等
+    - 自动学习：从输入中提取token
   - 持续集成：OSS-Fuzz集成
+    - 自动构建：每日构建和测试
+    - 漏洞报告：自动创建问题单
+    - 回归测试：防止漏洞重现
 - Honggfuzz：Google的模糊测试工具
   - 硬件特性：使用CPU硬件特性
+    - Intel PT：处理器跟踪技术
+    - 分支计数：硬件性能计数器
+    - BTS：分支跟踪存储
   - Android支持：原生支持Android
+    - 交叉编译：ARM/ARM64支持
+    - 设备测试：直接在设备上运行
+    - 模拟器支持：QEMU集成
   - 并行性：高效的多进程模式
+    - 进程池：预先fork的工作进程
+    - 负载均衡：智能任务分配
+    - 共享内存：输入语料库共享
   - 输入变异：多种变异策略
+    - 位翻转：随机位翻转
+    - 字节插入/删除：结构变异
+    - havoc模式：大规模随机变异
+    - 字典替换：基于字典的替换
+
+**漏洞利用框架：**
+- Metasploit Android模块：
+  - 漏洞利用：Stagefright、Binder等
+  - Payload生成：APK后门生成
+  - 后渗透模块：设备信息收集
+- POC开发框架：
+  - 漏洞验证：快速验证漏洞存在
+  - 利用链构造：ROP/JOP链生成
+  - 沙箱逃逸：Chrome、WebView逃逸
 
 ## 32.4 社区资源汇总
 
