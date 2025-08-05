@@ -13,53 +13,122 @@ Init进程是Android系统中第一个用户空间进程，承担着整个系统
 kernel_init() -> run_init_process("/init") -> execve("/init")
 ```
 
+内核在`kernel_init()`函数中按以下顺序尝试启动init：
+1. `ramdisk_execute_command`（通常是`/init`）
+2. `/sbin/init`
+3. `/etc/init`
+4. `/bin/init`
+5. `/bin/sh`（紧急模式）
+
+Android将init放在ramdisk根目录，确保第一个被找到。内核传递的环境变量极其有限：
+- `HOME=/`
+- `TERM=linux`
+- `PATH=/sbin:/usr/sbin:/bin:/usr/bin`
+
 Init进程的生命周期分为两个阶段：
 
 **First Stage Init**
+First Stage Init在ramdisk环境中运行，使用静态链接的最小化二进制文件，主要任务是准备真正的根文件系统：
+
 - 挂载基础文件系统（/dev、/proc、/sys等）
   - 使用`mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755")`
   - 创建必要的子目录：/dev/pts、/dev/socket、/dev/dm-user
+  - 挂载`mount("devpts", "/dev/pts", "devpts", 0, NULL)`支持伪终端
+  - 挂载`mount("proc", "/proc", "proc", 0, "hidepid=2")`增强安全性
+  - 挂载`mount("sysfs", "/sys", "sysfs", 0, NULL)`导出内核对象
+  
 - 创建设备节点
   - `/dev/null`、`/dev/zero`、`/dev/full`等基础设备
-  - `/dev/kmsg`用于内核日志
-  - `/dev/random`、`/dev/urandom`用于随机数
+  - `/dev/kmsg`用于内核日志（主设备号1，次设备号11）
+  - `/dev/random`、`/dev/urandom`用于随机数（主设备号1，次设备号8/9）
+  - `/dev/ptmx`伪终端主设备（主设备号5，次设备号2）
+  - 使用`mknod()`系统调用创建，设置权限0666或0600
+  
 - 初始化内核日志
   - 通过`android::base::InitLogging()`设置日志系统
   - 重定向stdout/stderr到`/dev/kmsg`
+  - 设置日志级别和格式（时间戳、进程信息等）
+  - 配置klog过滤规则，避免日志风暴
+  
+- 挂载必要的块设备
+  - 解析设备树（device tree）获取分区信息
+  - 等待块设备就绪（通过uevent监听）
+  - 挂载system分区到`/system`（只读）
+  - 挂载vendor分区到`/vendor`（只读）
+  - 处理A/B分区的slot选择
+  
 - 加载SELinux策略（如果是强制模式）
   - 调用`SelinuxInitialize()`加载编译后的策略
   - 设置进程上下文为`u:r:init:s0`
+  - 从`/system/etc/selinux/plat_sepolicy.cil`加载平台策略
+  - 合并`/vendor/etc/selinux/vendor_sepolicy.cil`厂商策略
+  - 通过`selinux_android_load_policy()`加载到内核
+  
 - 执行Second Stage Init
   - 通过`execv("/system/bin/init", argv)`重新执行自身
   - 传递`--second-stage`参数标识
+  - 保留必要的文件描述符（如`/dev/kmsg`）
 
 **Second Stage Init**
+Second Stage Init从真正的系统分区运行，拥有完整的库支持和更丰富的功能：
+
 - 初始化属性服务（Property Service）
-  - 创建属性共享内存区域
-  - 启动Unix域套接字监听属性设置请求
-  - 加载默认属性文件（default.prop、build.prop等）
+  - 创建属性共享内存区域（`/dev/__properties__`）
+  - 初始化属性区域头部，设置魔数和版本号
+  - 启动Unix域套接字监听属性设置请求（`/dev/socket/property_service`）
+  - 加载默认属性文件：
+    - `/default.prop`（ramdisk中的属性）
+    - `/system/build.prop`（系统属性）
+    - `/vendor/build.prop`（厂商属性）
+    - `/product/build.prop`（产品属性）
+    - `/odm/build.prop`（ODM属性）
+  - 设置属性区域的SELinux标签和访问权限
+  
 - 解析RC脚本
-  - 从`/system/etc/init/`、`/vendor/etc/init/`等目录加载
+  - 从以下目录按顺序加载RC文件：
+    - `/init.rc`（主配置文件）
+    - `/system/etc/init/`（系统服务）
+    - `/vendor/etc/init/`（厂商服务）
+    - `/odm/etc/init/`（ODM服务）
   - 构建Action和Service的内部数据结构
   - 验证语法正确性和权限要求
+  - 检查服务的可执行文件是否存在
+  - 预处理import语句，支持属性值替换
+  
+- 初始化子系统
+  - 启动ueventd处理设备事件（软链接到init）
+  - 启动watchdogd防止系统挂起（如果硬件支持）
+  - 创建控制消息处理器（`/dev/socket/init`）
+  - 注册信号处理器（SIGCHLD、SIGTERM等）
+  
 - 启动系统服务
   - 根据class和触发器有序启动
   - 设置进程的capabilities、优先级、cgroup等
+  - 配置OOM调整值保护关键服务
+  - 设置进程的namespace隔离（如果配置）
+  
 - 进入主事件循环
   - 基于epoll的事件驱动模型
   - 处理属性变化、子进程退出、控制消息等
+  - 执行pending的Action队列
+  - 监控服务健康状态，必要时重启
 
 **关键环境变量设置**
 ```
-PATH=/system/bin:/system/xbin:/vendor/bin
-LD_LIBRARY_PATH=/system/lib64:/vendor/lib64
+PATH=/system/bin:/system/xbin:/vendor/bin:/odm/bin
+LD_LIBRARY_PATH=/system/lib64:/vendor/lib64:/odm/lib64
 ANDROID_ROOT=/system
 ANDROID_DATA=/data
+ANDROID_STORAGE=/storage
+ANDROID_RUNTIME_ROOT=/apex/com.android.runtime
+ANDROID_TZDATA_ROOT=/apex/com.android.tzdata
+ANDROID_ART_ROOT=/apex/com.android.art
+BOOTCLASSPATH=/apex/com.android.runtime/javalib/core-oj.jar:...
 ```
 
 ### 4.1.2 关键数据结构
 
-Init进程使用三个核心数据结构管理系统启动：
+Init进程使用精心设计的数据结构管理系统启动，这些结构体现了Android对启动过程的细粒度控制：
 
 **Action（动作）**
 ```cpp
@@ -75,15 +144,28 @@ struct Action {
     size_t current_command;
     bool ExecuteOneCommand();
     bool CheckPropertyTriggers();
+    
+    // 触发器管理
+    std::set<std::string> required_property_contexts;
+    bool TriggersEqual(const Action& other) const;
+    
+    // 执行控制
+    std::chrono::steady_clock::time_point last_command_time;
+    std::optional<std::chrono::milliseconds> command_timeout;
 }
 ```
-Action代表一组命令的集合，可以被触发器（Trigger）激活执行。每个Action可以包含多个命令，按顺序执行。
+
+Action的关键特性：
+- **触发器类型**：事件触发器（如`boot`）或属性触发器（如`property:sys.boot_completed=1`）
+- **命令队列**：支持异步执行，每次循环只执行一个命令，避免阻塞
+- **优先级控制**：相同触发器的Action按解析顺序执行
+- **一次性执行**：`oneshot`标记的Action只执行一次
 
 **Service（服务）**
 ```cpp
 struct Service {
     std::string name;
-    unsigned flags;  // SVC_RUNNING, SVC_DISABLED等
+    unsigned flags;  // SVC_RUNNING, SVC_DISABLED, SVC_RESTARTING等
     pid_t pid;
     std::vector<std::string> args;
     std::vector<Option> options;
@@ -92,21 +174,46 @@ struct Service {
     int crash_count;
     time_t time_started;
     time_t time_crashed;
+    std::chrono::seconds restart_period = 5s;  // 重启间隔
+    std::optional<std::chrono::seconds> timeout_period;  // 启动超时
     
-    // 资源限制
-    std::vector<std::pair<int, rlimit>> rlimits;
-    std::vector<std::string> writepid_files;
+    // 进程管理
+    std::optional<std::string> console;  // 控制台设备
+    std::optional<bool> sigstop;  // 启动后是否暂停
+    std::vector<std::pair<int, rlimit>> rlimits;  // 资源限制
+    std::vector<std::string> writepid_files;  // PID文件路径
     
     // 安全上下文
-    std::string seclabel;
-    std::vector<uid_t> supp_gids;
-    CapSet capabilities;
+    std::string seclabel;  // SELinux标签
+    std::vector<uid_t> supp_gids;  // 补充组ID
+    CapSet capabilities;  // Linux capabilities
+    std::optional<std::vector<std::string>> updatable;  // APEX更新
     
     // 命名空间隔离
     unsigned namespace_flags;  // CLONE_NEWPID, CLONE_NEWNET等
+    std::vector<std::string> namespaces_to_enter;  // 进入已存在的namespace
+    
+    // cgroup和调度
+    std::map<std::string, std::string> cgroup_paths;
+    int oom_score_adjust = -1000;  // OOM killer调整值
+    int priority = 0;  // nice值
+    struct sched_param scheduling_param;  // 实时调度参数
+    
+    // 服务依赖
+    std::set<std::string> before_services;  // 必须在这些服务前启动
+    std::set<std::string> after_services;   // 必须在这些服务后启动
+    
+    // 关键服务处理
+    bool is_critical = false;  // 崩溃是否触发重启
+    std::vector<std::string> critical_services_to_restart;
 }
 ```
-Service代表需要启动和管理的守护进程，包含完整的进程管理信息。
+
+Service的高级特性：
+- **生命周期管理**：自动重启、崩溃计数、退避算法
+- **资源隔离**：支持Linux namespace、cgroup、capabilities
+- **依赖关系**：服务间的启动顺序依赖
+- **更新支持**：与APEX模块系统集成
 
 **Property（属性）**
 ```cpp
@@ -120,13 +227,36 @@ struct prop_info {
 // 属性区域管理
 struct prop_area {
     uint32_t bytes_used;
-    atomic_uint_least32_t serial;
-    uint32_t magic;
-    uint32_t version;
+    atomic_uint_least32_t serial;  // 全局版本号
+    uint32_t magic;  // 0x504f5250 ('PROP')
+    uint32_t version;  // 当前版本号
+    uint32_t reserved[4];
     char data[0];  // 实际属性数据
 };
+
+// 属性节点（Trie树结构）
+struct prop_bt {
+    uint32_t namelen;  // 名称长度
+    uint32_t proplen;  // 属性数量
+    uint32_t children;  // 子节点偏移
+    uint32_t props;  // 属性列表偏移
+    char name[0];  // 节点名称
+};
+
+// 属性上下文映射
+struct prop_context {
+    const char* name_prefix;  // 属性前缀
+    const char* context;  // SELinux上下文
+    bool exact_match;  // 是否精确匹配
+};
 ```
-系统属性采用共享内存实现，通过`property_service.cpp`管理，提供跨进程的配置共享机制。属性存储在多个内存区域中，按前缀分组以提高查找效率。
+
+系统属性的高级特性：
+- **共享内存实现**：通过`mmap`映射到所有进程，零拷贝访问
+- **Trie树索引**：支持前缀查询和通配符匹配
+- **版本控制**：通过`serial`字段检测属性变化，避免轮询
+- **分区存储**：不同前缀的属性存储在独立的内存区域
+- **访问控制**：结合SELinux和UID权限进行细粒度控制
 
 **命令管理器（CommandManager）**
 ```cpp
@@ -135,48 +265,171 @@ class BuiltinFunctionMap {
     
     // 注册的内置命令
     void RegisterBuiltinFunctions() {
+        // 文件系统操作
         Register("chmod", do_chmod);
         Register("chown", do_chown);
-        Register("class_start", do_class_start);
         Register("copy", do_copy);
-        Register("exec", do_exec);
         Register("mkdir", do_mkdir);
         Register("mount", do_mount);
-        Register("setprop", do_setprop);
+        Register("umount", do_umount);
+        Register("symlink", do_symlink);
+        Register("rm", do_rm);
+        Register("rmdir", do_rmdir);
+        Register("write", do_write);
+        
+        // 服务控制
+        Register("class_start", do_class_start);
+        Register("class_stop", do_class_stop);
+        Register("class_reset", do_class_reset);
         Register("start", do_start);
         Register("stop", do_stop);
+        Register("restart", do_restart);
+        Register("enable", do_enable);
+        
+        // 属性操作
+        Register("setprop", do_setprop);
+        Register("getprop", do_getprop);
+        Register("wait_for_prop", do_wait_for_prop);
+        
+        // 进程执行
+        Register("exec", do_exec);
+        Register("exec_start", do_exec_start);
+        Register("exec_background", do_exec_background);
+        
+        // 触发器管理
         Register("trigger", do_trigger);
-        Register("write", do_write);
-        // ... 更多命令
+        
+        // 系统控制
+        Register("bootchart", do_bootchart);
+        Register("init_user0", do_init_user0);
+        Register("installkey", do_installkey);
+        Register("load_persist_props", do_load_persist_props);
+        
+        // 网络配置
+        Register("hostname", do_hostname);
+        Register("domainname", do_domainname);
+        Register("ifup", do_ifup);
+        
+        // 安全相关
+        Register("restorecon", do_restorecon);
+        Register("restorecon_recursive", do_restorecon_recursive);
+        Register("setrlimit", do_setrlimit);
+        Register("swapon_all", do_swapon_all);
+        
+        // 日志和调试
+        Register("loglevel", do_loglevel);
+        Register("mark_post_data", do_mark_post_data);
+    }
+    
+    // 命令执行包装
+    Result<Success> Execute(const std::string& name, 
+                           const std::vector<std::string>& args) {
+        auto it = functions_.find(name);
+        if (it == functions_.end()) {
+            return Error() << "Unknown command: " << name;
+        }
+        return it->second(args);
     }
 };
 ```
 
+命令系统的设计特点：
+- **模块化设计**：每个命令是独立的函数，易于扩展
+- **错误处理**：使用`Result<T>`类型安全地返回错误
+- **参数验证**：每个命令函数负责验证自己的参数
+- **异步支持**：`exec_background`等命令支持非阻塞执行
+
 ### 4.1.3 事件循环机制
 
-Init进程的主循环基于epoll实现，监听以下事件：
-- 属性设置请求（通过Unix域套接字）
-- 子进程退出信号（SIGCHLD）
-- 其他进程的控制命令
-- 内核消息（通过netlink套接字）
+Init进程的主循环采用高效的epoll机制，这是Android系统响应性的基础。与传统的select/poll相比，epoll在大量文件描述符场景下性能更优：
 
-**Epoll事件源注册**
+**事件源类型**
+Init进程监听的事件源包括：
+- 属性设置请求（通过Unix域套接字`/dev/socket/property_service`）
+- 子进程退出信号（通过signalfd将SIGCHLD转换为文件描述符事件）
+- 控制命令（通过`/dev/socket/init`接收如`ctl.start`等命令）
+- 内核消息（通过netlink套接字接收uevent等）
+- 看门狗定时器（防止init进程挂起）
+- keychord事件（组合键触发特殊动作）
+
+**Epoll架构实现**
 ```cpp
-void Epoll::Open() {
-    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
+class Epoll {
+private:
+    int epoll_fd_;
+    std::map<int, std::function<void()>> handlers_;
     
-    // 注册信号处理
-    RegisterHandler(signal_fd, HandleSignals);
+public:
+    void Open() {
+        // 创建epoll实例，EPOLL_CLOEXEC防止fd泄露到子进程
+        epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
+        if (epoll_fd_ == -1) {
+            PLOG(FATAL) << "epoll_create1 failed";
+        }
+        
+        // 注册信号处理（使用signalfd）
+        sigset_t mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGCHLD);
+        sigaddset(&mask, SIGTERM);
+        signal_fd_ = signalfd(-1, &mask, SFD_CLOEXEC);
+        RegisterHandler(signal_fd_, HandleSignals);
+        
+        // 注册属性服务
+        property_fd_ = CreatePropertySocket();
+        RegisterHandler(property_fd_, HandlePropertySet);
+        
+        // 注册控制消息
+        init_fd_ = CreateInitSocket();
+        RegisterHandler(init_fd_, HandleInitSocket);
+        
+        // 注册keychord（组合键）
+        keychord_fd_ = OpenKeychordDevice();
+        if (keychord_fd_ >= 0) {
+            RegisterHandler(keychord_fd_, HandleKeychord);
+        }
+    }
     
-    // 注册属性服务
-    RegisterHandler(property_fd, HandlePropertySet);
+    void RegisterHandler(int fd, std::function<void()> handler) {
+        epoll_event ev = {};
+        ev.events = EPOLLIN;  // 监听可读事件
+        ev.data.fd = fd;
+        
+        if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
+            PLOG(ERROR) << "Failed to add fd " << fd << " to epoll";
+            return;
+        }
+        
+        handlers_[fd] = std::move(handler);
+    }
     
-    // 注册控制消息
-    RegisterHandler(init_fd, HandleInitSocket);
-    
-    // 注册子进程监控
-    RegisterHandler(sigchld_fd, HandleSigchld);
-}
+    std::optional<std::function<void()>> Wait(
+            std::optional<std::chrono::milliseconds> timeout) {
+        epoll_event events[32];
+        int timeout_ms = -1;
+        
+        if (timeout.has_value()) {
+            timeout_ms = timeout->count();
+        }
+        
+        int nr = epoll_wait(epoll_fd_, events, 
+                           arraysize(events), timeout_ms);
+        
+        if (nr == -1) {
+            PLOG(ERROR) << "epoll_wait failed";
+            return std::nullopt;
+        }
+        
+        for (int i = 0; i < nr; i++) {
+            auto it = handlers_.find(events[i].data.fd);
+            if (it != handlers_.end()) {
+                return it->second;
+            }
+        }
+        
+        return std::nullopt;
+    }
+};
 ```
 
 **主循环实现**
