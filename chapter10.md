@@ -31,6 +31,61 @@ SurfaceFlinger内部维护着一个Layer列表，每个Layer对应一个应用�
 - `DisplayDevice`：抽象显示设备（主屏、外接显示器等）
 - `RenderEngine`：执行GPU合成操作
 
+#### Layer管理机制
+
+SurfaceFlinger通过分层的方式管理所有可见内容。每个Layer具有以下属性：
+
+1. **几何属性**：
+   - 位置（x, y坐标）
+   - 大小（宽度、高度）
+   - 变换矩阵（旋转、缩放、倾斜）
+   - 裁剪区域
+
+2. **渲染属性**：
+   - Alpha透明度
+   - 混合模式（SRC_OVER、SRC等）
+   - 颜色空间（sRGB、Display P3等）
+   - HDR元数据
+
+3. **缓冲区属性**：
+   - 当前显示的GraphicBuffer
+   - 像素格式（RGBA_8888、RGB_565等）
+   - 缓冲区使用标志
+
+#### 事务处理机制
+
+SurfaceFlinger使用事务（Transaction）机制来原子性地更新多个Layer的状态：
+
+1. **事务收集**：客户端通过`SurfaceComposerClient`创建事务
+2. **批量提交**：多个Layer修改打包成一个事务
+3. **延迟应用**：事务在下一个VSYNC边界应用
+4. **原子性保证**：要么全部成功，要么全部回滚
+
+关键函数调用流程：
+- `SurfaceComposerClient::Transaction::apply()`：客户端提交事务
+- `SurfaceFlinger::setTransactionState()`：接收并缓存事务
+- `SurfaceFlinger::handleTransactionLocked()`：在合成时应用事务
+
+#### 显示设备抽象
+
+DisplayDevice类封装了物理和虚拟显示设备的差异：
+
+1. **物理显示**：
+   - 内置屏幕（主显示器）
+   - HDMI外接显示器
+   - DisplayPort连接
+
+2. **虚拟显示**：
+   - 屏幕录制（MediaProjection）
+   - 无线投屏（Miracast）
+   - 开发者选项的辅助显示
+
+每个DisplayDevice维护：
+- 显示配置（分辨率、刷新率、HDR能力）
+- 输出缓冲区（FrameBuffer）
+- 显示变换（方向、镜像）
+- 电源状态管理
+
 ### 10.1.2 BufferQueue机制
 
 BufferQueue是Android图形系统中的核心组件，实现了生产者-消费者模式的高效缓冲区管理。其工作流程如下：
@@ -46,6 +101,76 @@ BufferQueue支持多种工作模式：
 - **同步模式**：严格的生产者-消费者同步
 - **异步模式**：允许丢帧以保持实时性
 
+#### 缓冲区状态机
+
+BufferQueue中的每个缓冲区都有明确的状态转换：
+
+```
+FREE → DEQUEUED → QUEUED → ACQUIRED → FREE
+```
+
+状态说明：
+- **FREE**：缓冲区空闲，可被生产者申请
+- **DEQUEUED**：已分配给生产者，正在填充内容
+- **QUEUED**：内容就绪，等待消费者获取
+- **ACQUIRED**：消费者正在使用（显示中）
+
+异常状态处理：
+- **STALE**：缓冲区内容过期，需要丢弃
+- **INVALID**：缓冲区配置变更，需要重新分配
+
+#### 生产者接口（IGraphicBufferProducer）
+
+生产者通过以下关键接口与BufferQueue交互：
+
+1. **requestBuffer()**：获取缓冲区的GraphicBuffer句柄
+2. **dequeueBuffer()**：申请可用缓冲区槽位
+3. **queueBuffer()**：提交渲染完成的缓冲区
+4. **cancelBuffer()**：取消已申请但未使用的缓冲区
+5. **connect()**：建立生产者连接
+6. **disconnect()**：断开生产者连接
+
+高级功能：
+- **setAsyncMode()**：配置异步模式
+- **setMaxDequeuedBufferCount()**：设置最大出队缓冲区数
+- **setGenerationNumber()**：处理Surface重建
+
+#### 消费者接口（IGraphicBufferConsumer）
+
+消费者接口提供以下功能：
+
+1. **acquireBuffer()**：获取下一个可显示的缓冲区
+2. **releaseBuffer()**：释放已使用的缓冲区
+3. **setConsumerName()**：设置消费者标识（调试用）
+4. **setDefaultBufferFormat()**：配置默认像素格式
+5. **setConsumerUsageBits()**：设置消费者使用标志
+
+消费者监听器（ConsumerListener）：
+- **onFrameAvailable()**：新帧可用通知
+- **onBuffersReleased()**：缓冲区释放通知
+- **onSidebandStreamChanged()**：边带流变更
+
+#### 同步机制与Fence
+
+BufferQueue使用Fence（栅栏）机制确保GPU/CPU同步：
+
+1. **Acquire Fence**：
+   - 生产者提供，表示何时可以安全读取缓冲区
+   - 消费者等待此fence后才能使用缓冲区
+
+2. **Release Fence**：
+   - 消费者提供，表示何时完成缓冲区使用
+   - 生产者等待此fence后才能重新写入
+
+3. **Present Fence**：
+   - 表示缓冲区实际显示在屏幕上的时间
+   - 用于精确的显示时间控制
+
+同步保证：
+- 无撕裂：确保完整帧显示
+- 无竞争：避免读写冲突
+- 低延迟：最小化等待时间
+
 ### 10.1.3 VSYNC与显示同步
 
 VSYNC（垂直同步）是确保流畅显示的关键机制。Android通过Choreographer框架协调应用渲染与显示刷新：
@@ -58,6 +183,84 @@ VSYNC（垂直同步）是确保流畅显示的关键机制。Android通过Chore
 ```
 App VSYNC → 应用渲染（16.6ms） → SF VSYNC → 合成（4ms） → 显示
 ```
+
+#### DispSync模型详解
+
+DispSync是Android的软件VSYNC预测模型，通过以下机制工作：
+
+1. **相位锁定环（PLL）**：
+   - 跟踪硬件VSYNC时序
+   - 过滤抖动和噪声
+   - 预测未来VSYNC时间
+
+2. **误差校正**：
+   - 持续测量预测误差
+   - 动态调整模型参数
+   - 处理刷新率变化
+
+3. **多相位支持**：
+   - App相位：应用开始渲染时间
+   - SF相位：SurfaceFlinger开始合成时间
+   - Present相位：实际显示时间
+
+相位计算公式：
+```
+AppPhase = VSYNCPeriod - AppDuration - SFDuration - PresentDuration
+SFPhase = VSYNCPeriod - SFDuration - PresentDuration
+```
+
+#### Choreographer架构
+
+Choreographer是应用层的VSYNC调度器，负责协调：
+
+1. **输入事件处理**
+2. **动画更新**
+3. **View树遍历**
+4. **绘制操作**
+
+工作流程：
+1. 注册VSYNC回调：`Choreographer.postFrameCallback()`
+2. 等待VSYNC信号：通过`DisplayEventReceiver`接收
+3. 执行回调链：按优先级处理各类任务
+4. 提交渲染：将结果发送到RenderThread
+
+#### VSYNC-sf与VSYNC-app
+
+Android使用双VSYNC机制优化渲染管线：
+
+**VSYNC-app（应用VSYNC）**：
+- 触发时机：显示前1.5-2帧
+- 用途：应用开始渲染下一帧
+- 优化目标：最大化渲染时间
+
+**VSYNC-sf（SurfaceFlinger VSYNC）**：
+- 触发时机：显示前0.5帧
+- 用途：SurfaceFlinger开始合成
+- 优化目标：减少合成延迟
+
+时序优化策略：
+- 动态调整相位差
+- 基于历史数据预测渲染时长
+- 处理突发负载
+
+#### 自适应VSYNC偏移
+
+Android 11+引入了自适应VSYNC偏移机制：
+
+1. **工作负载分析**：
+   - 监控渲染时长统计
+   - 识别应用类型（游戏、视频、UI）
+   - 评估系统负载
+
+2. **动态调整**：
+   - 高负载时增加偏移
+   - 低延迟场景减少偏移
+   - 平衡功耗和性能
+
+3. **反馈控制**：
+   - 检测掉帧情况
+   - 调整预测模型
+   - 优化未来帧调度
 
 ### 10.1.4 Hardware Composer (HWC) 集成
 
@@ -72,6 +275,96 @@ HWC版本演进：
 - HWC 2.x：引入更灵活的合成策略
 - HWC 3.0：支持可变刷新率（VRR）和HDR
 
+#### HWC 2.x架构详解
+
+HWC 2.x引入了更现代的架构设计：
+
+1. **设备与显示分离**：
+   - HWC设备：代表整个合成硬件
+   - Display对象：每个物理/虚拟显示器
+   - Layer对象：可合成的图层
+
+2. **能力查询机制**：
+   - `getCapabilities()`：查询硬件能力
+   - `getDisplayCapabilities()`：显示器特定能力
+   - `getLayerCapabilities()`：层类型支持
+
+3. **合成类型**：
+   - **Device合成**：硬件直接处理
+   - **Client合成**：GPU渲染到中间缓冲区
+   - **SolidColor合成**：纯色层优化
+   - **Cursor合成**：硬件光标层
+   - **Sideband合成**：视频直通路径
+
+#### 合成策略决策
+
+HWC通过以下流程决定每层的合成方式：
+
+1. **validateDisplay()**阶段：
+   - SurfaceFlinger提交所有层信息
+   - HWC分析每层属性
+   - 返回建议的合成类型
+
+2. **层属性考虑因素**：
+   - 像素格式兼容性
+   - 变换复杂度（旋转、缩放）
+   - Alpha混合需求
+   - 保护内容（DRM）
+
+3. **资源限制**：
+   - 硬件层数限制
+   - 带宽限制
+   - 功耗预算
+
+4. **acceptDisplayChanges()**：
+   - 接受HWC的合成建议
+   - 准备相应的渲染路径
+
+#### Present与Retire机制
+
+HWC使用Present/Retire机制管理显示时序：
+
+1. **presentDisplay()**：
+   - 提交最终的显示配置
+   - 返回present fence
+   - 触发硬件开始扫描
+
+2. **getReleaseFences()**：
+   - 获取每层的release fence
+   - 表示硬件何时完成读取
+   - 用于缓冲区生命周期管理
+
+3. **Retire fence**：
+   - 表示前一帧完全离开屏幕
+   - 用于精确的延迟测量
+   - 支持帧调度优化
+
+#### HDR与色彩管理
+
+HWC 2.3+增加了高级色彩管理支持：
+
+1. **HDR类型支持**：
+   - HDR10：静态元数据
+   - HDR10+：动态元数据
+   - Dolby Vision：专有格式
+   - HLG：广播兼容HDR
+
+2. **色彩空间管理**：
+   - sRGB：标准色彩空间
+   - Display P3：广色域
+   - BT.2020：超高清标准
+   - 自定义色彩矩阵
+
+3. **色调映射**：
+   - SDR到HDR转换
+   - HDR到SDR转换
+   - 亮度自适应
+
+4. **实现要求**：
+   - 10-bit色深支持
+   - 广色域显示能力
+   - 精确的色彩转换
+
 ### 10.1.5 帧调度与延迟优化
 
 SurfaceFlinger采用多种技术优化渲染延迟：
@@ -85,6 +378,105 @@ SurfaceFlinger采用多种技术优化渲染延迟：
 - **触摸延迟**：从触摸到显示更新的时间
 - **卡顿率**：掉帧次数占总帧数的比例
 - **能耗效率**：每帧渲染的能量消耗
+
+#### 预测调度算法
+
+SurfaceFlinger使用基于机器学习的预测模型：
+
+1. **特征收集**：
+   - 应用类型（游戏、视频、UI）
+   - 层数量和复杂度
+   - GPU/CPU负载状态
+   - 历史渲染时长
+
+2. **预测模型**：
+   - 滑动窗口统计
+   - 指数加权移动平均
+   - 异常值过滤
+
+3. **自适应调整**：
+   - 实时更新预测参数
+   - 处理场景切换
+   - 防止过度优化
+
+预测公式：
+```
+PredictedDuration = α * HistoricalAvg + β * RecentTrend + γ * LoadFactor
+```
+
+#### 动态刷新率（DRR）策略
+
+Android 11+引入的动态刷新率机制：
+
+1. **内容检测**：
+   - 视频帧率匹配（24/30/60fps）
+   - 游戏性能需求（90/120Hz）
+   - UI滚动流畅度
+   - 电池电量状态
+
+2. **切换策略**：
+   - 无缝切换：避免黑屏
+   - 迟滞决策：防止频繁切换
+   - 优先级管理：前台应用优先
+
+3. **刷新率档位**：
+   - 60Hz：基础档位
+   - 90Hz：平衡性能与功耗
+   - 120Hz：高性能模式
+   - 30Hz：节能模式（阅读）
+
+#### BLAST缓冲区传输
+
+BLAST是Android 12引入的新一代缓冲区传输机制：
+
+1. **异步传输**：
+   - 解耦BufferQueue依赖
+   - 减少IPC开销
+   - 支持批量传输
+
+2. **事务同步**：
+   - 与SurfaceFlinger事务同步
+   - 保证原子性更新
+   - 支持回滚机制
+
+3. **性能优化**：
+   - 减少缓冲区拷贝
+   - 降低延迟抖动
+   - 提高帧率稳定性
+
+关键接口：
+- `BLASTBufferQueue::submitBuffer()`
+- `Transaction::setBuffer()`
+- `SurfaceControl::updateBuffer()`
+
+#### 触摸延迟优化
+
+降低触摸延迟的关键技术：
+
+1. **触摸采样优化**：
+   - 提高采样率（240Hz+）
+   - 硬件时间戳
+   - 预测正触摸轨迹
+
+2. **输入管线优化**：
+   - 直通输入事件
+   - 跳过不必要的层级
+   - 实时线程优先级
+
+3. **渲染管线同步**：
+   - 触摸事件与VSYNC对齐
+   - 预测性渲染
+   - GPU优先级提升
+
+4. **测量与反馈**：
+   - MotionEvent时间戳
+   - 帧显示时间跟踪
+   - 端到端延迟统计
+
+典型优化结果：
+- 基线：80-100ms
+- 优化后：40-60ms
+- 极限优化：20-30ms
 
 ## 10.2 Graphics HAL与Gralloc
 
@@ -114,6 +506,52 @@ Gralloc（Graphics Allocator）负责图形缓冲区的分配和管理：
 - 支持可扩展的元数据
 - 与IAllocator AIDL接口集成
 
+#### Gralloc 4.0架构详解
+
+Gralloc 4.0引入了更现代化的设计：
+
+1. **模块化设计**：
+   - IAllocator：缓冲区分配服务
+   - IMapper：缓冲区映射服务
+   - BufferDescriptorInfo：统一描述符
+
+2. **元数据系统**：
+   - StandardMetadataType：标准元数据
+   - VendorMetadataType：厂商扩展
+   - 动态元数据查询
+
+3. **错误处理**：
+   - 详细的错误码
+   - 异常恢复机制
+   - 调试信息输出
+
+#### Usage Flags详解
+
+Usage标志决定了缓冲区的分配策略：
+
+**CPU访问标志**：
+- `USAGE_CPU_READ_RARELY`：偶尔CPU读取
+- `USAGE_CPU_READ_OFTEN`：频繁CPU读取
+- `USAGE_CPU_WRITE_RARELY`：偶尔CPU写入
+- `USAGE_CPU_WRITE_OFTEN`：频繁CPU写入
+
+**GPU访问标志**：
+- `USAGE_GPU_TEXTURE`：作为GPU纹理
+- `USAGE_GPU_RENDER_TARGET`：作为渲染目标
+- `USAGE_GPU_CUBE_MAP`：立方体贴图
+- `USAGE_GPU_DATA_BUFFER`：通用GPU数据
+
+**特殊用途标志**：
+- `USAGE_HW_COMPOSER`：HWC合成
+- `USAGE_HW_VIDEO_ENCODER`：视频编码
+- `USAGE_CAMERA_OUTPUT`：相机输出
+- `USAGE_PROTECTED`：DRM保护内容
+
+组合策略：
+- 多个usage可以组合
+- 驱动根据组合选择最优内存
+- 冲突的usage会导致分配失败
+
 ### 10.2.2 缓冲区分配策略
 
 Gralloc根据usage标志选择合适的内存类型：
@@ -128,6 +566,78 @@ Gralloc根据usage标志选择合适的内存类型：
 - 数据格式（RGB、YUV等）
 - 性能需求（带宽、延迟）
 - 安全要求（DRM、安全视频路径）
+
+#### 内存类型选择算法
+
+Gralloc使用决策树选择最佳内存类型：
+
+1. **第一步：安全性检查**
+   ```
+   if (usage & USAGE_PROTECTED) {
+       return SECURE_HEAP;
+   }
+   ```
+
+2. **第二步：访问模式分析**
+   ```
+   if (usage & CPU_WRITE_OFTEN) {
+       if (usage & GPU_RENDER_TARGET) {
+           return CACHED_COHERENT_HEAP;
+       } else {
+           return SYSTEM_HEAP;
+       }
+   }
+   ```
+
+3. **第三步：性能优化**
+   ```
+   if (usage & GPU_TEXTURE && !(usage & CPU_ACCESS)) {
+       return GPU_PRIVATE_HEAP;
+   }
+   ```
+
+#### 像素格式与内存布局
+
+不同像素格式需要不同的内存布局策略：
+
+**RGB格式**：
+- RGBA_8888：32位线性布局
+- RGB_565：16位紧凑布局
+- RGBA_1010102：HDR 10位颜色深度
+
+**YUV格式**：
+- YV12：平面格式，Y/U/V分离
+- NV12：半平面格式，Y和UV交织
+- NV21：NV12的UV字节序交换
+
+**压缩格式**：
+- AFBC：ARM帧缓冲压缩
+- UBWC：高通通用带宽压缩
+- 厂商私有压缩格式
+
+内存对齐要求：
+- CPU访问：通常昧64字节对齐
+- GPU纹理：可能需要256字节对齐
+- 显示扫描：可能需要页对齐
+
+#### 带宽优化策略
+
+减少内存带宽消耗的技术：
+
+1. **帧缓冲压缩**：
+   - 透明压缩/解压
+   - 显著降低带宽需求
+   - GPU/显示硬件支持
+
+2. **智能缓存**：
+   - 利用GPU内部缓存
+   - 减少对外部内存访问
+   - Tile-based渲染优化
+
+3. **局部更新**：
+   - 只更新变化区域
+   - 减少整帧传输
+   - 节省带宽和功耗
 
 ### 10.2.3 ION内存分配器集成
 
@@ -144,6 +654,84 @@ ION heap类型：
 - CMA heap：动态连续内存分配
 - Secure heap：安全隔离内存
 
+#### ION架构详解
+
+ION采用客户端-服务端架构：
+
+1. **客户端接口**：
+   - `ion_alloc()`：分配内存
+   - `ion_map()`：映射到用户空间
+   - `ion_share()`：获取可共享的fd
+   - `ion_free()`：释放内存
+
+2. **内核驱动**：
+   - 管理多个heap
+   - 处理内存分配请求
+   - 维护引用计数
+   - 处理cache操作
+
+3. **Heap实现**：
+   - 每个heap有不同策略
+   - 可扩展新heap类型
+   - 支持厂商定制
+
+#### System Heap实现
+
+System heap是最常用的heap类型：
+
+1. **分配策略**：
+   - 使用伙伴系统
+   - 支持大小不同的分配
+   - 页面级别管理
+
+2. **优化特性**：
+   - 页面池缓存
+   - 延迟分配
+   - 碎片整理
+
+3. **性能考虑**：
+   - 快速分配路径
+   - 批量操作优化
+   - NUMA感知
+
+#### CMA Heap实现
+
+CMA（Contiguous Memory Allocator）heap提供大块连续内存：
+
+1. **动态分配**：
+   - 从可移动页面池分配
+   - 需要时迁移页面
+   - 平时可供系统使用
+
+2. **使用场景**：
+   - 相机预览缓冲区
+   - 视频解码器DMA
+   - GPU大块纹理
+
+3. **性能权衡**：
+   - 分配可能较慢
+   - 但连续性保证
+   - 减少IOMMU压力
+
+#### Secure Heap实现
+
+Secure heap用于DRM保护内容：
+
+1. **隔离机制**：
+   - TrustZone保护
+   - CPU不可访问
+   - 仅硬件解码器可用
+
+2. **使用流程**：
+   - 安全世界分配
+   - 返回句柄到普通世界
+   - 通过句柄传递给硬件
+
+3. **应用场景**：
+   - DRM视频播放
+   - 安全相机
+   - 生物识别数据
+
 ### 10.2.4 跨进程缓冲区共享
 
 Android通过文件描述符实现高效的跨进程图形缓冲区共享：
@@ -158,6 +746,94 @@ Android通过文件描述符实现高效的跨进程图形缓冲区共享：
 - `lock()/unlock()`：CPU访问同步
 - `importBuffer()`：导入外部缓冲区
 
+#### 跨进程共享流程
+
+完整的跨进程缓冲区共享流程：
+
+1. **生产者端**：
+   ```
+   1. allocate() -> buffer_handle_t
+   2. 封装handle和fd到Parcel
+   3. 通过Binder发送
+   4. 保持引用直到确认接收
+   ```
+
+2. **消费者端**：
+   ```
+   1. 从Binder接收Parcel
+   2. 提取handle和fd
+   3. importBuffer() -> 本地handle
+   4. registerBuffer() -> 注册到mapper
+   ```
+
+3. **使用阶段**：
+   ```
+   1. lock() -> 获取CPU访问权
+   2. 读写缓冲区内容
+   3. unlock() -> 释放CPU访问权
+   4. 同步fence传递
+   ```
+
+#### Native Handle结构
+
+native_handle_t的设计支持灵活的数据传输：
+
+```c
+typedef struct native_handle {
+    int version;        // 版本号
+    int numFds;         // 文件描述符数量
+    int numInts;        // 整数数据数量
+    int data[0];        // 变长数据区
+} native_handle_t;
+```
+
+数据布局：
+- 前numFds个位置存放文件描述符
+- 后面numInts个位置存放整数数据
+- 整数数据通常包含：
+  - 宽度、高度
+  - 像素格式
+  - 步长（stride）
+  - 厂商私有数据
+
+#### Binder传输优化
+
+Binder对文件描述符有特殊处理：
+
+1. **FD转换**：
+   - 内核自动转换fd
+   - 目标进程获得新fd
+   - 指向同一内核对象
+
+2. **安全检查**：
+   - 验证fd有效性
+   - 检查访问权限
+   - 防止fd注入攻击
+
+3. **生命周期管理**：
+   - Binder保证传输完整性
+   - 异常时自动清理
+   - 防止资源泄漏
+
+#### AHardwareBuffer封装
+
+Android 8.0引入AHardwareBuffer作为更高级的抽象：
+
+1. **统一API**：
+   - NDK可用
+   - 跨语言支持
+   - 简化使用
+
+2. **功能增强**：
+   - 自动引用计数
+   - 格式查询和验证
+   - 更好的错误处理
+
+3. **与其他API集成**：
+   - EGL扩展支持
+   - Vulkan外部内存
+   - MediaCodec集成
+
 ### 10.2.5 DMA-BUF与跨设备共享
 
 DMA-BUF是Linux内核的缓冲区共享框架，Android利用它实现：
@@ -170,6 +846,94 @@ DMA-BUF是Linux内核的缓冲区共享框架，Android利用它实现：
 - Implicit fencing：基于reservation object
 - Explicit fencing：使用sync_file接口
 - Timeline semaphore：Vulkan风格的同步原语
+
+#### DMA-BUF工作原理
+
+DMA-BUF通过文件描述符实现设备间共享：
+
+1. **导出者（Exporter）**：
+   - 创建DMA-BUF对象
+   - 实现attach/detach回调
+   - 管理物理页面
+
+2. **导入者（Importer）**：
+   - 通过fd获取DMA-BUF
+   - attach到设备
+   - 映射到设备地址空间
+
+3. **核心操作**：
+   ```
+   dma_buf_export() -> 创建DMA-BUF
+   dma_buf_fd() -> 获取文件描述符
+   dma_buf_get() -> 通过fd获取DMA-BUF
+   dma_buf_attach() -> 附加到设备
+   dma_buf_map_attachment() -> 映射到设备
+   ```
+
+#### 隐式同步（Implicit Sync）
+
+基于reservation object的自动同步：
+
+1. **Reservation Object**：
+   - 每个DMA-BUF关联一个resv
+   - 包含读写fence列表
+   - 自动跟踪依赖关系
+
+2. **工作流程**：
+   - 写入前等待所有读写fence
+   - 读取前等待写fence
+   - 完成后添加新fence
+
+3. **优缺点**：
+   - 优点：透明、自动
+   - 缺点：灵活性不足
+   - 适用：传统图形管线
+
+#### 显式同步（Explicit Sync）
+
+使用sync_file显式管理同步：
+
+1. **Sync File**：
+   - 封装一个或多个fence
+   - 通过fd传递
+   - 支持合并操作
+
+2. **Android集成**：
+   - BufferQueue使用
+   - HWC传递
+   - GPU驱动支持
+
+3. **API示例**：
+   ```
+   sync_wait() -> 等待fence信号
+   sync_merge() -> 合并多个fence
+   sync_file_info() -> 查询fence状态
+   ```
+
+#### 零拷贝相机预览
+
+利用DMA-BUF实现相机到显示的零拷贝路径：
+
+1. **相机HAL**：
+   - 分配来自Gralloc的缓冲区
+   - 配置ISP直接输出到DMA-BUF
+   - 设置合适的像素格式
+
+2. **GPU处理**：
+   - 直接使用相机输出作为纹理
+   - 无需内存拷贝
+   - 实时特效处理
+
+3. **显示输出**：
+   - HWC直接合成
+   - 或GPU渲染后显示
+   - 最小化延迟
+
+性能优势：
+- 零内存拷贝
+- 降低功耗
+- 减少延迟
+- 提高帧率
 
 ## 10.3 Vulkan/OpenGL ES集成
 
