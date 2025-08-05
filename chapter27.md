@@ -22,6 +22,47 @@ Android对CFS的主要修改：
 - 修改`sched_min_granularity_ns`提高交互响应
 - 引入`schedtune`机制进行能效调优
 
+**CFS内部实现细节**：
+
+CFS使用`struct sched_entity`表示可调度实体，通过`struct cfs_rq`管理运行队列：
+
+```c
+struct sched_entity {
+    struct load_weight load;       // 权重信息
+    struct rb_node run_node;       // 红黑树节点
+    u64 exec_start;               // 执行开始时间
+    u64 sum_exec_runtime;         // 累计执行时间
+    u64 vruntime;                 // 虚拟运行时间
+    u64 prev_sum_exec_runtime;    // 上次更新时的累计时间
+};
+```
+
+**权重计算机制**：
+
+Linux内核定义了40个权重等级，nice值每差1，CPU时间相差约10%。权重数组`prio_to_weight[]`预计算了从nice -20到19的权重值：
+
+```
+nice -20: weight = 88761
+nice   0: weight = 1024 (NICE_0_LOAD)
+nice  19: weight = 15
+```
+
+这种指数级的权重差异确保了高优先级进程能获得显著更多的CPU时间。
+
+**与iOS调度器对比**：
+
+- iOS使用Mach微内核的调度器，基于优先级带(priority bands)
+- iOS的QoS (Quality of Service)类别：User-interactive、User-initiated、Utility、Background
+- Android的nice值更细粒度，iOS的QoS更面向应用场景
+- iOS对后台任务限制更严格，调度策略更激进
+
+**与鸿蒙调度器对比**：
+
+- 鸿蒙采用确定性调度算法，支持分布式软总线场景
+- 引入任务调度图(Task Scheduling Graph)概念
+- 支持跨设备的协同调度，考虑网络延迟
+- 实时性保证扩展到分布式场景
+
 #### RT调度类实现
 
 RT调度类为实时任务提供确定性调度保证，Android中主要用于：
@@ -36,6 +77,58 @@ RT调度特点：
 - **抢占规则**：高优先级任务总是抢占低优先级
 - **CPU带宽限制**：通过`sched_rt_runtime_us`和`sched_rt_period_us`防止RT任务独占CPU
 
+**RT调度实现原理**：
+
+RT调度类使用优先级数组管理可运行任务：
+
+```c
+struct rt_prio_array {
+    DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1);  // 优先级位图
+    struct list_head queue[MAX_RT_PRIO];    // 每个优先级的任务队列
+};
+```
+
+**SCHED_FIFO vs SCHED_RR**：
+
+- SCHED_FIFO：先进先出，同优先级任务不会相互抢占，一直运行直到阻塞或主动让出
+- SCHED_RR：轮转调度，同优先级任务按时间片(默认100ms)轮转
+
+**RT带宽控制机制**：
+
+Linux 2.6.25引入RT带宽控制，防止RT任务饿死其他任务：
+
+```bash
+# 默认配置：每1秒内RT任务最多运行0.95秒
+/proc/sys/kernel/sched_rt_period_us = 1000000  # 1秒
+/proc/sys/kernel/sched_rt_runtime_us = 950000  # 0.95秒
+```
+
+超过配额后，RT任务会被限流(throttled)，直到下个周期。这保证了系统始终有5%的时间处理非RT任务。
+
+**Android RT优先级分配策略**：
+
+```
+音频相关：
+- AudioFlinger::MixerThread: 96-98
+- FastMixer: 98
+- AudioTrack回调: 95
+
+图形相关：
+- SurfaceFlinger主线程: 1-2 (使用nice值)
+- RenderThread: 不使用RT，使用nice -10到-4
+- HWC回调线程: 90
+
+输入相关：
+- InputReader: 91
+- InputDispatcher: 92
+```
+
+**与iOS实时性保证对比**：
+
+- iOS没有显式的RT调度类，通过QoS和优先级反转避免机制保证实时性
+- iOS的实时音频使用专门的Audio Workgroup API
+- Android的RT调度更显式可控，iOS更依赖系统自动管理
+
 #### EAS (Energy Aware Scheduling) 集成
 
 Android 5.0开始集成EAS，实现性能与功耗的平衡：
@@ -49,6 +142,64 @@ Android 5.0开始集成EAS，实现性能与功耗的平衡：
 - `find_energy_efficient_cpu()`: EAS核心决策函数
 - `compute_energy()`: 计算任务在特定CPU上的能耗
 - `schedutil_cpu_freq()`: 频率调节接口
+
+**PELT算法详解**：
+
+PELT (Per-Entity Load Tracking)是EAS的核心，追踪每个任务的历史负载：
+
+```c
+// 负载衰减公式：每1024us衰减一次
+load = load * y + new_load * (1 - y)
+// 其中 y = 0.978 (衰减因子)
+```
+
+PELT追踪三个关键指标：
+- `load_avg`：平均负载，用于负载均衡
+- `util_avg`：平均利用率，用于频率调节
+- `runnable_avg`：可运行时间比例
+
+**能效模型定义**：
+
+设备树中定义每个CPU的能效数据：
+
+```dts
+cpu-cost {
+    cluster0 {
+        busy-cost-data = <
+            /* freq    power */
+            300000    5
+            600000    9
+            900000    16
+            1200000   27
+        >;
+        idle-cost-data = <
+            /* state   power */
+            0          0    /* WFI */
+            1          0    /* retention */
+            2          0    /* power collapse */
+        >;
+    };
+};
+```
+
+**EAS决策过程**：
+
+1. 计算任务在每个CPU上的预期能耗
+2. 考虑任务迁移成本（cache miss等）
+3. 选择能耗最低的CPU
+4. 触发频率调整
+
+**Android特有的EAS扩展**：
+
+- **Prefer Idle**：优先选择空闲CPU，减少干扰
+- **SchedTune**：per-cgroup的性能/能效偏好
+- **WALT (Window Assisted Load Tracking)**：某些厂商使用的替代方案
+
+**与其他系统能效调度对比**：
+
+- iOS：使用E-core和P-core的非对称架构，通过QoS自动分配
+- 鸿蒙：引入AI预测的能效调度，基于应用行为模式
+- Windows on ARM：使用类似的大小核架构，但调度策略更保守
 
 #### 与Linux主线调度器差异
 
