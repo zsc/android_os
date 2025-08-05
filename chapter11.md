@@ -58,6 +58,32 @@ Android相对于标准ALSA的主要改进：
 - 引入Audio HAL层，统一硬件接口
 - 实现了更复杂的混音和策略管理
 
+**ALSA架构层次**：
+```
+应用程序
+    ↓
+ALSA-lib (用户空间库)
+    ↓
+ALSA Core (内核空间)
+    ↓
+Hardware Drivers
+```
+
+**Android音频架构改造**：
+```
+应用程序
+    ↓
+AudioFlinger/AudioPolicyService
+    ↓
+Audio HAL
+    ↓
+TinyALSA
+    ↓
+ALSA Core (定制版)
+    ↓
+Vendor Drivers
+```
+
 **PulseAudio对比**
 - PulseAudio是Linux桌面常用的音频服务器
 - Android的AudioFlinger承担类似角色
@@ -68,6 +94,32 @@ Android相对于标准ALSA的主要改进：
 - Android策略管理更加集中化
 - Android对实时性要求更高
 
+**数据流模型对比**：
+
+PulseAudio拉取模型：
+1. 音频设备触发中断
+2. PulseAudio从应用拉取数据
+3. 混音处理
+4. 写入硬件缓冲区
+
+AudioFlinger推送模型：
+1. 应用主动写入共享内存
+2. AudioFlinger定期处理
+3. 混音并推送到HAL
+4. HAL写入硬件
+
+**内存使用对比**：
+- ALSA-lib：~500KB代码 + 配置文件
+- TinyALSA：~50KB代码，无配置文件
+- PulseAudio：~2MB内存占用
+- AudioFlinger：~500KB + 共享内存池
+
+**实时性对比**：
+- 标准Linux：延迟通常50-100ms
+- PulseAudio：可优化到20-30ms
+- Android：FastTrack可达10-20ms
+- 专业音频(JACK)：<5ms但CPU占用高
+
 ### 11.1.3 与iOS Core Audio对比
 
 **iOS Core Audio架构**
@@ -75,17 +127,75 @@ Android相对于标准ALSA的主要改进：
 - AVAudioEngine：高级音频图形API
 - Core Audio HAL：硬件抽象层
 
+**iOS音频栈层次**：
+```
+AVFoundation (高级API)
+    ↓
+AVAudioEngine
+    ↓
+Audio Unit (处理图)
+    ↓
+Core Audio (底层API)
+    ↓
+IOKit Audio Family
+```
+
 架构对比：
 - iOS采用拉取模型（Pull Model），Android采用推送模型（Push Model）
 - iOS的Audio Unit更加模块化，Android的效果处理更集中
 - iOS对音频会话（AVAudioSession）的抽象更清晰
 - Android的音频焦点机制更加灵活
 
+**回调模型差异**：
+
+iOS拉取模型示例：
+```
+RenderCallback(inRefCon, ioActionFlags, inTimeStamp, 
+               inBusNumber, inNumberFrames, ioData) {
+    // 系统要求应用提供inNumberFrames帧数据
+    // 应用填充ioData缓冲区
+}
+```
+
+Android推送模型示例：
+```
+audioTrack.write(audioData, offset, size) {
+    // 应用主动推送数据到系统
+    // 系统决定何时处理
+}
+```
+
 性能特征：
 - iOS通常具有更低的音频延迟（<10ms）
 - Android通过FastTrack和AAudio逐步缩小差距
 - iOS的音频栈更加封闭和优化
 - Android需要适配更多硬件变体
+
+**音频会话管理对比**：
+
+iOS AVAudioSession：
+- 单一全局会话对象
+- 清晰的类别定义（播放、录音、播放和录音）
+- 自动处理中断和路由变化
+- 与系统深度集成
+
+Android音频焦点：
+- 分布式焦点管理
+- 更细粒度的流类型
+- 应用需要主动处理焦点变化
+- 支持更复杂的共存策略
+
+**硬件集成差异**：
+- iOS：统一的硬件平台，深度优化
+- Android：HAL层抽象多样化硬件
+- iOS：固定的音频管线
+- Android：可定制的音频路径
+
+**开发复杂度**：
+- iOS：API较为统一，学习曲线平缓
+- Android：多套API（Java/Native），选择困难
+- iOS：文档完善，示例丰富
+- Android：需要理解更多底层细节
 
 ## 11.2 AudioFlinger核心服务
 
@@ -113,20 +223,75 @@ AudioFlinger采用多线程架构，主要线程类型：
 - DuplicatingThread：复制线程，用于多设备输出
 - FastMixerThread：快速混音线程，用于低延迟场景
 
+**线程详细分析**：
+
+*MixerThread特性*：
+- 处理周期：通常20-40ms
+- 支持最多32路音频混合
+- 自动格式转换和重采样
+- 实现音量渐变避免爆音
+- 线程优先级：ANDROID_PRIORITY_AUDIO
+
+*DirectOutputThread特性*：
+- 用于Dolby/DTS等压缩格式
+- 绕过混音器直达硬件
+- 支持gapless播放
+- 减少解码延迟
+- 专用于单一音频流
+
+*FastMixerThread特性*：
+- 处理周期：2-5ms
+- 限制最多8路快速音轨
+- 固定采样率（通常48kHz）
+- SCHED_FIFO实时调度
+- CPU核心亲和性绑定
+
 **RecordThread（录音线程）**
 - 管理音频输入设备
 - 处理录音数据的分发
 - 支持多客户端同时录音
+
+*录音线程工作流程*：
+1. 从HAL读取音频数据
+2. 分发给各个录音客户端
+3. 应用音频效果（如降噪）
+4. 处理采样率转换
+5. 管理客户端缓冲区
 
 **OffloadThread（卸载线程）**
 - 处理硬件解码的压缩音频
 - 减少CPU负载
 - 支持低功耗音频播放
 
+*卸载播放优势*：
+- CPU可进入深度睡眠
+- 硬件解码器效率更高
+- 支持长时间音乐播放
+- 功耗降低50-70%
+
 线程通信机制：
 - 使用FIFO队列进行命令传递
 - 通过共享内存传输音频数据
 - 采用条件变量进行同步
+
+**线程间同步详解**：
+
+*命令队列*：
+```
+ThreadBase::sendConfigEvent() → mConfigEvents.push() → 
+    → processConfigEvents() → handleConfigEvent()
+```
+
+*数据传输*：
+- 客户端写入共享内存
+- 通过mCblk控制块同步
+- 使用原子操作避免锁
+- 环形缓冲区管理
+
+*时序同步*：
+- 使用MonotonicTime时间戳
+- 硬件时间戳校准
+- 处理时钟漂移
 
 ### 11.2.3 混音与重采样机制
 
@@ -145,6 +310,34 @@ AudioFlinger的混音器负责将多路音频流合并：
 5. 混音累加
 6. 限幅处理
 
+**混音算法实现**：
+
+*基础混音公式*：
+```
+output[n] = Σ(input[i][n] × volume[i] × pan[i])
+```
+
+*防止溢出处理*：
+```
+// 16位音频混音
+int32_t acc = 0;
+for (track : activeTracks) {
+    acc += track.sample * track.volume;
+}
+// 限幅到16位范围
+output = clamp(acc, -32768, 32767);
+```
+
+*音量渐变实现*：
+```
+// 避免音量突变造成爆音
+volumeInc = (targetVolume - currentVolume) / rampFrames;
+for (i = 0; i < frames; i++) {
+    currentVolume += volumeInc;
+    output[i] = input[i] * currentVolume;
+}
+```
+
 **重采样器（Resampler）**
 
 Android提供多种重采样算法：
@@ -158,6 +351,49 @@ Android提供多种重采样算法：
 - 通知音使用快速算法
 - 支持动态切换
 
+**重采样算法详解**：
+
+*线性插值*：
+```
+// 简单但快速
+y = y0 + (y1 - y0) * fraction
+```
+
+*三次插值*：
+```
+// Catmull-Rom样条插值
+y = a0 * y0 + a1 * y1 + a2 * y2 + a3 * y3
+其中系数根据fraction计算
+```
+
+*Sinc插值*：
+```
+// 基于sinc函数的理想低通滤波器
+y = Σ(x[n] * sinc(π * (t - n)))
+窗函数优化：Kaiser窗、Blackman窗
+```
+
+**重采样性能优化**：
+- NEON SIMD加速
+- 查找表优化sinc计算
+- 多相滤波器结构
+- 缓存友好的数据布局
+
+**采样率转换场景**：
+- 44.1kHz（CD音质）→ 48kHz（Android标准）
+- 任意采样率 → 设备原生采样率
+- 蓝牙设备采样率适配
+- USB音频设备兼容
+
+**质量与性能权衡**：
+```
+质量等级设置：
+- QUALITY_LOW: 线性插值，<5% CPU
+- QUALITY_DEFAULT: 三次插值，~10% CPU  
+- QUALITY_HIGH: Sinc插值，~20% CPU
+- QUALITY_DYNAMIC: 根据CPU负载动态调整
+```
+
 ### 11.2.4 内存管理与缓冲区设计
 
 **共享内存机制**
@@ -167,6 +403,29 @@ AudioFlinger使用共享内存避免数据拷贝：
 - 客户端直接写入共享缓冲区
 - 服务端零拷贝读取
 
+**共享内存创建流程**：
+```
+1. AudioFlinger::createTrack()
+2. 分配ashmem: ashmem_create_region()
+3. 映射到服务端: mmap(fd, size, PROT_READ)
+4. 传递fd给客户端
+5. 客户端映射: mmap(fd, size, PROT_WRITE)
+```
+
+**内存布局设计**：
+```
+SharedMemory Layout:
++------------------+
+| Control Block    | (AudioTrackShared)
++------------------+
+| Buffer Header    | (元数据)
++------------------+
+| Audio Buffer 0   |
++------------------+
+| Audio Buffer 1   | (双缓冲)
++------------------+
+```
+
 **环形缓冲区（CircularBuffer）**
 
 音频数据使用环形缓冲区管理：
@@ -174,11 +433,79 @@ AudioFlinger使用共享内存避免数据拷贝：
 - 无锁设计提高性能
 - 自动处理缓冲区回绕
 
+**无锁环形缓冲区实现**：
+```
+struct CircularBuffer {
+    atomic<uint32_t> writeIndex;
+    atomic<uint32_t> readIndex;
+    uint32_t capacity;
+    uint8_t* data;
+    
+    // 写入操作
+    write(samples, count) {
+        available = capacity - (writeIdx - readIdx);
+        toWrite = min(count, available);
+        // 分两段写入处理回绕
+        memcpy(data + (writeIdx % capacity), samples, toWrite);
+        writeIdx.fetch_add(toWrite);
+    }
+}
+```
+
+**缓冲区大小计算**：
+```
+bufferSize = sampleRate × channelCount × bytesPerSample × latencyMs / 1000
+
+示例：48kHz立体声16位，20ms延迟
+bufferSize = 48000 × 2 × 2 × 20 / 1000 = 3840 bytes
+```
+
 **内存池管理**
 
 - 预分配音频缓冲区池
 - 减少动态内存分配
 - 支持快速缓冲区切换
+
+**缓冲区池设计**：
+```
+class BufferPool {
+    struct Buffer {
+        size_t size;
+        void* data;
+        bool inUse;
+    };
+    
+    vector<Buffer> buffers;
+    mutex poolMutex;
+    
+    // 预分配不同大小的缓冲区
+    init() {
+        // 小缓冲区：用于低延迟
+        allocateBuffers(256, 16);   // 16个256字节
+        // 中等缓冲区：标准使用
+        allocateBuffers(4096, 8);   // 8个4KB
+        // 大缓冲区：用于offload
+        allocateBuffers(65536, 4);  // 4个64KB
+    }
+}
+```
+
+**内存对齐优化**：
+- 缓存行对齐（64字节）
+- SIMD指令对齐（16/32字节）
+- 页面对齐（4KB）
+
+**内存访问模式优化**：
+```
+// 预取下一缓冲区
+__builtin_prefetch(nextBuffer, 0, 3);
+
+// NEON批量处理
+int16x8_t samples = vld1q_s16(input);
+int16x8_t volume = vdupq_n_s16(vol);
+int16x8_t output = vmulq_s16(samples, volume);
+vst1q_s16(output, result);
+```
 
 ## 11.3 AudioPolicyService策略管理
 
