@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="./">
+    <title>第2章：Linux内核层定制</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/highlight.css">
+    <script src="assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors', 'ams']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors', '[tex]/ams']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="sidebar-search-input" placeholder="搜索..." autocomplete="off">
+            </div>
+            <div id="tree-container">
+                <nav class="tree-nav" role="tree">
+                    <div class="tree-item " >
+                        <a href="index.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter1.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第1章：Android系统架构概览</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item active" >
+                        <a href="chapter2.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第2章：Linux内核层定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter3.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第3章：硬件抽象层(HAL)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter4.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第4章：Init进程与系统启动</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter5.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第5章：Zygote与应用进程管理</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter6.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第6章：Android Runtime (ART)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter7.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第7章：Binder IPC机制深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter8.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第8章：系统服务架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter9.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第9章：ContentProvider与数据共享</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter10.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第10章：Android图形系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter11.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第11章：音频系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter12.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第12章：相机与多媒体框架</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter13.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第13章：Android安全模型</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter14.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第14章：密钥管理与硬件安全</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter15.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第15章：漏洞案例分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter16.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第16章：Neural Networks API (NNAPI)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter17.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第17章：TensorFlow Lite集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter18.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第18章：ML Kit与设备端AI</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter19.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第19章：NPU/TPU硬件加速</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter20.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第20章：协处理器系统集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter21.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第21章：MIUI系统架构剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter22.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第22章：ColorOS/EMUI技术分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter23.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第23章：厂商内核与驱动定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter24.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第24章：厂商AI能力对比</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter25.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第25章：OriginOS深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter26.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第26章：Android虚拟化技术</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter27.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第27章：实时性与性能优化</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter28.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第28章：逆向工程与安全研究</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter29.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第29章：Android未来演进</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter30.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录A：调试工具与技巧</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter31.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录B：源码编译与定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter32.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第32章：参考资源</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="CLAUDE.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">AndroidOS原理教程项目说明</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="README.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="2linux">第2章：Linux内核层定制</h1>
+<p>Android虽然基于Linux内核，但为了满足移动设备的特殊需求，Google对标准Linux内核进行了大量定制。这些修改不仅涉及性能优化和功耗管理，更包括了全新的IPC机制、内存管理策略和安全模型。本章将深入剖析Android内核层的关键定制，理解这些修改背后的设计理念，并与标准Linux、iOS和鸿蒙系统进行对比分析。</p>
+<h2 id="21-android">2.1 Android特有的内核修改</h2>
+<h3 id="211">2.1.1 内核补丁集概览</h3>
+<p>Android内核基于Linux LTS（长期支持）版本，通过一系列补丁集进行定制。主要修改包括：</p>
+<ol>
+<li>
+<p><strong>电源管理增强</strong>
+   - Wakelock机制（已逐步被标准Linux的autosleep替代）
+   - Early Suspend/Late Resume（已废弃，被Runtime PM替代）
+   - CPU频率调节器定制（Interactive Governor）
+   - Doze模式内核支持（通过<code>alarmtimer</code>和<code>timerfd</code>）
+   - 动态电压频率调节（DVFS）优化</p>
+</li>
+<li>
+<p><strong>内存管理优化</strong>
+   - Low Memory Killer（LMK）及其用户空间实现LMKD
+   - ION内存分配器（统一的内存管理框架）
+   - ZRAM压缩交换分区（使用LZ4/ZSTD算法）
+   - KSM（Kernel Samepage Merging）优化
+   - Per-app内存追踪（<code>memtrack</code> HAL支持）
+   - 进程状态收集（<code>/proc/pid/oom_score_adj</code>）</p>
+</li>
+<li>
+<p><strong>进程间通信</strong>
+   - Binder驱动（高效的IPC机制）
+   - Ashmem（匿名共享内存）
+   - FuseD守护进程支持（Android 11+）
+   - HwBinder（硬件服务专用，Android 8.0+）</p>
+</li>
+<li>
+<p><strong>安全增强</strong>
+   - Paranoid网络权限检查（基于GID）
+   - SELinux强制访问控制定制
+   - seccomp过滤器扩展
+   - dm-verity完整性验证
+   - 文件加密（fscrypt）集成</p>
+</li>
+</ol>
+<h3 id="212">2.1.2 内核配置特点</h3>
+<p>Android内核配置（defconfig）与标准Linux发行版存在显著差异：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">#</span> <span class="err">核心</span><span class="n">Android功能</span>
+<span class="n">CONFIG_ANDROID</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ANDROID_BINDER_IPC</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ANDROID_BINDERFS</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ANDROID_BINDER_DEVICES</span><span class="o">=</span><span class="s">&quot;binder,hwbinder,vndbinder&quot;</span>
+<span class="n">CONFIG_ANDROID_BINDER_IPC_32BIT</span><span class="o">=</span><span class="n">y</span>
+
+<span class="o">#</span> <span class="err">内存管理</span>
+<span class="n">CONFIG_ANDROID_LOW_MEMORY_KILLER</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ASHMEM</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ION</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ION_SYSTEM_HEAP</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ZRAM</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_CRYPTO_LZ4</span><span class="o">=</span><span class="n">y</span>
+
+<span class="o">#</span> <span class="err">电源管理</span>
+<span class="n">CONFIG_PM_WAKELOCKS</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_PM_WAKELOCKS_LIMIT</span><span class="o">=</span><span class="mi">100</span>
+<span class="n">CONFIG_PM_WAKELOCKS_GC</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_SUSPEND_TIME</span><span class="o">=</span><span class="n">y</span>
+
+<span class="o">#</span> <span class="err">安全相关</span>
+<span class="n">CONFIG_SECURITY_SELINUX</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_SECURITY_SELINUX_BOOTPARAM</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_SECURITY_SELINUX_DEVELOP</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_SECCOMP</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_SECCOMP_FILTER</span><span class="o">=</span><span class="n">y</span>
+
+<span class="o">#</span> <span class="err">调试支持</span>
+<span class="n">CONFIG_PANIC_TIMEOUT</span><span class="o">=</span><span class="mi">5</span>
+<span class="n">CONFIG_PANIC_ON_OOPS</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_DEBUG_RODATA</span><span class="o">=</span><span class="n">y</span>
+</code></pre></div>
+
+<p>这些配置选项启用了Android特有的内核功能。值得注意的是，从Android 11开始，许多Android特有功能正在通过GKI（Generic Kernel Image）项目模块化，以减少碎片化。</p>
+<p>关键配置差异：</p>
+<ul>
+<li><strong>调度器</strong>：Android偏向使用<code>CONFIG_SCHED_TUNE</code>进行能效优化</li>
+<li><strong>文件系统</strong>：默认启用F2FS、SquashFS用于系统分区</li>
+<li><strong>网络</strong>：启用更严格的套接字权限控制</li>
+<li><strong>追踪</strong>：默认集成ftrace用于systrace性能分析</li>
+</ul>
+<h3 id="213">2.1.3 与其他系统的对比</h3>
+<p><strong>iOS内核定制</strong>：</p>
+<ul>
+<li>iOS基于XNU（混合内核），包含Mach微内核和BSD层</li>
+<li>使用Mach端口进行IPC，而非Binder</li>
+<li>Mach消息传递：支持复杂的权限传递和端口权限</li>
+<li>性能开销：每次IPC需要内核调度，开销较大</li>
+<li>内存管理更激进，使用Jetsam机制</li>
+<li>基于优先级带（Priority Bands）的内存回收</li>
+<li>内存压力通知（Memory Pressure Notification）</li>
+<li>无swap文件，完全依赖物理内存</li>
+<li>安全模型：</li>
+<li>强制代码签名（Mandatory Code Signing）</li>
+<li>沙箱更严格，基于MAC框架</li>
+<li>Secure Enclave处理器集成</li>
+</ul>
+<p><strong>鸿蒙内核设计</strong>：</p>
+<ul>
+<li>支持微内核和宏内核双架构</li>
+<li>LiteOS-A：轻量级内核，用于IoT设备</li>
+<li>Linux内核：兼容Android生态</li>
+<li>未来：自研微内核架构</li>
+<li>IPC机制基于微内核设计，性能优于传统微内核</li>
+<li>分布式软总线：跨设备透明通信</li>
+<li>RPC性能优化：硬件加速支持</li>
+<li>自动发现和认证机制</li>
+<li>内存管理采用分布式软总线设计</li>
+<li>跨设备内存共享</li>
+<li>智能内存迁移</li>
+<li>AI辅助的内存预测</li>
+</ul>
+<p><strong>Linux桌面/服务器内核</strong>：</p>
+<ul>
+<li>通用性设计，支持广泛硬件</li>
+<li>内存管理保守，依赖swap</li>
+<li>调度器公平性优先（CFS）</li>
+<li>模块化程度高，驱动可动态加载</li>
+</ul>
+<h2 id="22-lmklmkd">2.2 低内存管理器（LMK/LMKD）</h2>
+<h3 id="221-lmk">2.2.1 LMK工作原理</h3>
+<p>Low Memory Killer是Android处理内存压力的核心机制。它通过以下步骤工作：</p>
+<ol>
+<li><strong>内存水位监控</strong>
+   - 定义多个内存阈值（minfree）
+   - 每个阈值对应一个进程优先级（adj）
+   - 通过<code>/sys/module/lowmemorykiller/parameters/</code>进行配置
+   - 典型配置示例（单位：4KB页面）：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">minfree</span><span class="o">:</span><span class="w"> </span><span class="mi">18432</span><span class="o">,</span><span class="mi">23040</span><span class="o">,</span><span class="mi">27648</span><span class="o">,</span><span class="mi">32256</span><span class="o">,</span><span class="mi">36864</span><span class="o">,</span><span class="mi">46080</span>
+<span class="n">adj</span><span class="o">:</span><span class="w">     </span><span class="mi">0</span><span class="o">,</span><span class="mi">100</span><span class="o">,</span><span class="mi">200</span><span class="o">,</span><span class="mi">300</span><span class="o">,</span><span class="mi">900</span><span class="o">,</span><span class="mi">906</span>
+</code></pre></div>
+
+<ol start="2">
+<li>
+<p><strong>进程优先级评分</strong>
+   - ADJ值范围：-1000到1000
+   - 系统进程：-1000到-800（native系统进程）
+   - 持久进程：-800（persistent应用）
+   - 前台应用：0（FOREGROUND_APP）
+   - 可见应用：100-200（VISIBLE_APP）
+   - 可感知服务：200-300（PERCEPTIBLE_APP）
+   - 后台服务：300-400（BACKUP_APP/SERVICE）
+   - HOME应用：600
+   - 前一个应用：700（PREVIOUS_APP）
+   - 缓存进程：900-999（CACHED_APP）
+   - 空进程：1000（CACHED_APP_EMPTY）</p>
+</li>
+<li>
+<p><strong>杀进程决策</strong>
+   - 当可用内存低于阈值时触发
+   - 优先杀死adj值最高的进程
+   - 考虑进程内存占用大小（<code>oom_score</code>计算）
+   - 决策算法：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code>foreach (process in processes) {
+    if (process.adj &gt;= min_adj_for_memfree) {
+        score = process.adj * 10000 + process.rss
+        candidates.add(process, score)
+    }
+}
+kill(candidates.max_by_score())
+</code></pre></div>
+
+<ol start="4">
+<li><strong>触发时机</strong>
+   - 内存分配失败（<code>__alloc_pages_slowpath</code>）
+   - 定期检查（通过<code>vmpressure</code>事件）
+   - 主动触发（<code>echo 1 &gt; /proc/sys/vm/drop_caches</code>）</li>
+</ol>
+<h3 id="222-lmkd">2.2.2 LMKD演进</h3>
+<p>从Android 4.4开始，Google引入了用户空间的lmkd守护进程，逐步替代内核中的LMK：</p>
+<p><strong>LMKD优势</strong>：</p>
+<ul>
+<li>更灵活的策略配置</li>
+<li>支持内存压力检测（PSI - Pressure Stall Information）</li>
+<li>更好的与用户空间协调</li>
+<li>支持进程组管理</li>
+<li>支持多种内存压力信号源</li>
+</ul>
+<p><strong>架构演进</strong>：</p>
+<ol>
+<li>
+<p><strong>Android 4.4-7.x</strong>：基础LMKD
+   - 简单移植内核LMK逻辑
+   - 通过<code>/proc/meminfo</code>轮询
+   - 性能开销较大</p>
+</li>
+<li>
+<p><strong>Android 8.0-9.0</strong>：性能优化
+   - 引入<code>memory.pressure_level</code>通知
+   - 减少轮询开销
+   - 支持<code>ro.lmk.use_minfree_levels</code>配置</p>
+</li>
+<li>
+<p><strong>Android 10+</strong>：PSI集成
+   - 使用内核PSI（Pressure Stall Information）
+   - 更精确的压力检测
+   - 支持<code>ro.lmk.use_psi</code>开关</p>
+</li>
+<li>
+<p><strong>Android 12+</strong>：智能化
+   - 机器学习辅助决策
+   - 应用启动预测
+   - 内存压缩协调</p>
+</li>
+</ol>
+<p><strong>关键接口</strong>：</p>
+<ul>
+<li><code>ProcessList.setOomAdj()</code>：设置进程优先级</li>
+<li><code>ActivityManagerService.updateOomAdj()</code>：动态调整</li>
+<li>Socket通信：<code>/dev/socket/lmkd</code></li>
+<li>命令协议：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>LMK_TARGET &lt;minfree&gt; &lt;min_oom_adj&gt;
+LMK_PROCPRIO &lt;pid&gt; &lt;uid&gt; &lt;oom_adj&gt;
+LMK_PROCREMOVE &lt;pid&gt;
+LMK_GETKILLCNT
+</code></pre></div>
+
+<p><strong>配置属性</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 启用新LMKD</span>
+ro.lmk.use_new_strategy<span class="o">=</span><span class="nb">true</span>
+<span class="c1"># 使用PSI</span>
+ro.lmk.use_psi<span class="o">=</span><span class="nb">true</span>
+<span class="c1"># PSI触发阈值</span>
+ro.lmk.psi_partial_stall_ms<span class="o">=</span><span class="m">70</span>
+ro.lmk.psi_complete_stall_ms<span class="o">=</span><span class="m">700</span>
+<span class="c1"># 交换空间阈值</span>
+ro.lmk.swap_free_low_percentage<span class="o">=</span><span class="m">20</span>
+<span class="c1"># 调试级别</span>
+ro.lmk.debug<span class="o">=</span><span class="nb">false</span>
+</code></pre></div>
+
+<h3 id="223">2.2.3 内存压力处理对比</h3>
+<p><strong>Linux标准OOM Killer</strong>：</p>
+<ul>
+<li>基于<code>oom_score</code>计算</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>oom_score = (process_memory / total_memory) * 1000
+oom_score += oom_score_adj  # -1000 到 1000
+</code></pre></div>
+
+<ul>
+<li>考虑进程的内存使用、运行时间等</li>
+<li>相对保守，只在极端情况触发</li>
+<li>触发条件：内存分配完全失败</li>
+<li>全局决策，可能误杀重要进程</li>
+</ul>
+<p><strong>iOS Jetsam</strong>：</p>
+<ul>
+<li>更激进的内存回收策略</li>
+<li>基于内存占用和优先级带（Priority Bands）</li>
+<li>Band 0：内核线程（不可杀）</li>
+<li>Band 1-3：系统关键服务</li>
+<li>Band 4-6：系统应用</li>
+<li>Band 7-9：第三方应用前台</li>
+<li>Band 10+：后台应用</li>
+<li>支持内存压力通知机制</li>
+<li><code>DISPATCH_MEMORYPRESSURE_NORMAL</code></li>
+<li><code>DISPATCH_MEMORYPRESSURE_WARN</code></li>
+<li><code>DISPATCH_MEMORYPRESSURE_CRITICAL</code></li>
+<li>内存水位线（单位MB）：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="n">Critical</span><span class="o">:</span><span class="w"> </span><span class="mi">15</span><span class="n">MB</span><span class="w"> </span><span class="o">(</span><span class="n">iPhone</span><span class="o">)</span>
+<span class="n">Warning</span><span class="o">:</span><span class="w"> </span><span class="mi">20</span><span class="n">MB</span>
+<span class="n">Normal</span><span class="o">:</span><span class="w"> </span><span class="mi">30</span><span class="n">MB</span>
+</code></pre></div>
+
+<ul>
+<li>无swap机制，完全依赖物理内存</li>
+</ul>
+<p><strong>鸿蒙内存管理</strong>：</p>
+<ul>
+<li>分布式内存池概念</li>
+<li>本地内存池：设备私有</li>
+<li>共享内存池：跨设备访问</li>
+<li>远程内存池：按需迁移</li>
+<li>跨设备内存协同</li>
+<li>内存页面迁移（Page Migration）</li>
+<li>远程内存访问（Remote Memory Access）</li>
+<li>内存压缩传输</li>
+<li>AI预测式内存分配</li>
+<li>应用行为模式学习</li>
+<li>内存需求预测模型</li>
+<li>预分配优化</li>
+</ul>
+<p><strong>性能对比</strong>：
+| 特性 | Linux OOM | Android LMK/D | iOS Jetsam | 鸿蒙 |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>Linux OOM</th>
+<th>Android LMK/D</th>
+<th>iOS Jetsam</th>
+<th>鸿蒙</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>触发积极性</td>
+<td>低</td>
+<td>中</td>
+<td>高</td>
+<td>智能</td>
+</tr>
+<tr>
+<td>决策延迟</td>
+<td>高</td>
+<td>中</td>
+<td>低</td>
+<td>低</td>
+</tr>
+<tr>
+<td>内存利用率</td>
+<td>60-70%</td>
+<td>70-85%</td>
+<td>85-95%</td>
+<td>80-90%</td>
+</tr>
+<tr>
+<td>误杀率</td>
+<td>中</td>
+<td>低</td>
+<td>极低</td>
+<td>极低</td>
+</tr>
+<tr>
+<td>跨设备支持</td>
+<td>无</td>
+<td>无</td>
+<td>无</td>
+<td>原生</td>
+</tr>
+</tbody>
+</table>
+<h2 id="23-binder">2.3 Binder驱动实现</h2>
+<h3 id="231-binder">2.3.1 Binder架构设计</h3>
+<p>Binder是Android最重要的内核修改之一，提供高效的进程间通信：</p>
+<p><strong>核心组件</strong>：</p>
+<ol>
+<li>
+<p><strong>Binder驱动</strong>（<code>/dev/binder</code>）
+   - 内核模块，处理IPC请求
+   - 管理进程间的数据传输
+   - 维护引用计数和死亡通知
+   - 主要文件：<code>drivers/android/binder.c</code>
+   - 设备节点：</p>
+<ul>
+<li><code>/dev/binder</code>：应用通信</li>
+<li><code>/dev/hwbinder</code>：HAL通信（Android 8.0+）</li>
+<li><code>/dev/vndbinder</code>：Vendor通信</li>
+</ul>
+</li>
+<li>
+<p><strong>ServiceManager</strong>
+   - Binder的DNS服务
+   - 管理系统服务注册
+   - Context Manager（handle=0）
+   - 服务查询接口：</p>
+<ul>
+<li><code>getService()</code>：获取服务</li>
+<li><code>addService()</code>：注册服务</li>
+<li><code>listServices()</code>：列出所有服务</li>
+<li><code>checkService()</code>：检查服务是否存在</li>
+</ul>
+</li>
+<li>
+<p><strong>libbinder库</strong>
+   - 用户空间的Binder封装
+   - 提供<code>IBinder</code>、<code>IInterface</code>等接口
+   - 处理序列化/反序列化
+   - 关键类：</p>
+<ul>
+<li><code>BBinder</code>：服务端实现</li>
+<li><code>BpBinder</code>：客户端代理</li>
+<li><code>Parcel</code>：数据封装</li>
+<li><code>ProcessState</code>：进程状态管理</li>
+<li><code>IPCThreadState</code>：线程状态管理</li>
+</ul>
+</li>
+</ol>
+<p><strong>Binder设计理念</strong>：</p>
+<ol>
+<li><strong>面向对象</strong>：远程对象调用如本地调用</li>
+<li><strong>引用计数</strong>：自动管理生命周期</li>
+<li><strong>线程透明</strong>：自动线程池管理</li>
+<li><strong>安全性</strong>：UID/PID传递，内核级验证</li>
+</ol>
+<h3 id="232-binder">2.3.2 Binder通信机制</h3>
+<p><strong>数据传输流程</strong>：</p>
+<ol>
+<li><strong>mmap内存映射</strong>
+   - 发送方和接收方共享内核缓冲区
+   - 避免数据多次拷贝
+   - 典型映射大小：<ul>
+<li>普通应用：1MB</li>
+<li>系统服务：4MB</li>
+<li>ServiceManager：128KB</li>
+<li>内存布局：</li>
+</ul>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="nb">+----------------+</span><span class="c"> 0x00000000</span>
+<span class="c">| 用户空间数据   |</span>
+<span class="nb">+----------------+</span><span class="c"> </span>
+<span class="c">| mmap区域       | </span><span class="nv">&lt;</span><span class="nb">-</span><span class="c"> Binder映射区</span>
+<span class="nb">+----------------+</span>
+<span class="c">| 堆栈空间       |</span>
+<span class="nb">+----------------+</span><span class="c"> 0xFFFFFFFF</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>事务处理</strong>
+   - 命令协议：<ul>
+<li><code>BC_TRANSACTION</code>：发起事务</li>
+<li><code>BC_REPLY</code>：发送回复</li>
+<li><code>BR_TRANSACTION</code>：接收事务</li>
+<li><code>BR_REPLY</code>：接收回复</li>
+<li><code>BC_ACQUIRE</code>/<code>BC_RELEASE</code>：引用计数</li>
+<li><code>BC_INCREFS</code>/<code>BC_DECREFS</code>：弱引用</li>
+<li>事务流程：</li>
+</ul>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">Client</span><span class="w">                    </span><span class="n">Kernel</span><span class="w">                     </span><span class="n">Server</span>
+<span class="w">  </span><span class="o">|</span><span class="w">                         </span><span class="o">|</span><span class="w">                          </span><span class="o">|</span>
+<span class="w">  </span><span class="o">|--</span><span class="n">BC_TRANSACTION</span><span class="o">-------&gt;|</span><span class="w">                          </span><span class="o">|</span>
+<span class="w">  </span><span class="o">|</span><span class="w">                         </span><span class="o">|--</span><span class="n">BR_TRANSACTION</span><span class="o">---------&gt;|</span>
+
+<span class="w">  </span><span class="o">|</span><span class="w">                         </span><span class="o">|--</span><span class="n">BR_TRANSACTION</span><span class="o">---------&gt;|</span>
+<span class="w">  </span><span class="o">|</span><span class="w">                         </span><span class="o">|</span><span class="w">                          </span><span class="o">|</span>
+<span class="w">  </span><span class="o">|</span><span class="w">                         </span><span class="o">|&lt;-----</span><span class="n">BC_REPLY</span><span class="o">------------|</span>
+<span class="w">  </span><span class="o">|&lt;----</span><span class="n">BR_REPLY</span><span class="o">-----------|</span><span class="w">                          </span><span class="o">|</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>线程池管理</strong>
+   - 动态创建Binder线程
+   - 最大线程数限制（默认16）
+   - <code>ioctl(BINDER_SET_MAX_THREADS)</code>
+   - 线程管理策略：<ul>
+<li>主线程：负责注册服务</li>
+<li>工作线程：处理客户端请求</li>
+<li>按需创建：根据负载动态调整</li>
+</ul>
+</li>
+</ol>
+<p><strong>关键数据结构</strong>：</p>
+<ul>
+<li><code>binder_proc</code>：进程描述符</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">binder_proc</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">hlist_node</span><span class="w"> </span><span class="n">proc_node</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">rb_root</span><span class="w"> </span><span class="n">threads</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">rb_root</span><span class="w"> </span><span class="n">nodes</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">rb_root</span><span class="w"> </span><span class="n">refs_by_desc</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">list_head</span><span class="w"> </span><span class="n">todo</span><span class="p">;</span>
+<span class="w">    </span><span class="n">wait_queue_head_t</span><span class="w"> </span><span class="n">wait</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">binder_stats</span><span class="w"> </span><span class="n">stats</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">list_head</span><span class="w"> </span><span class="n">delivered_death</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">max_threads</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">requested_threads</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">ready_threads</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">long</span><span class="w"> </span><span class="n">default_priority</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<ul>
+<li><code>binder_node</code>：Binder实体</li>
+<li>本地强引用计数</li>
+<li>本地弱引用计数</li>
+<li>远程引用列表</li>
+<li><code>binder_ref</code>：Binder引用</li>
+<li>描述符（desc）</li>
+<li>目标节点</li>
+<li>强/弱引用计数</li>
+<li><code>binder_buffer</code>：数据缓冲区</li>
+<li>物理页面列表</li>
+<li>用户空间地址</li>
+<li>内核空间地址</li>
+</ul>
+<p><strong>一次拷贝原理</strong>：</p>
+<ol>
+<li>客户端将数据拷贝到内核空间</li>
+<li>内核通过mmap将该内存映射到服务端</li>
+<li>服务端直接访问映射内存，无需再次拷贝</li>
+</ol>
+<h3 id="233-binderipc">2.3.3 Binder与其他IPC对比</h3>
+<p><strong>性能对比</strong>：</p>
+<div class="codehilite"><pre><span></span><code>传统IPC（2次拷贝）：用户空间A → 内核 → 用户空间B
+Binder（1次拷贝）：用户空间A → 内核/用户空间B共享区域
+共享内存（0次拷贝）：直接访问，但需要同步机制
+</code></pre></div>
+
+<p><strong>详细性能比较</strong>：
+| IPC机制 | 拷贝次数 | 延迟(µs) | 吞吐量(MB/s) | CPU占用 |</p>
+<table>
+<thead>
+<tr>
+<th>IPC机制</th>
+<th>拷贝次数</th>
+<th>延迟(µs)</th>
+<th>吞吐量(MB/s)</th>
+<th>CPU占用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pipe</td>
+<td>2</td>
+<td>5.4</td>
+<td>180</td>
+<td>高</td>
+</tr>
+<tr>
+<td>Socket</td>
+<td>2</td>
+<td>5.0</td>
+<td>200</td>
+<td>高</td>
+</tr>
+<tr>
+<td>Binder</td>
+<td>1</td>
+<td>2.5</td>
+<td>400</td>
+<td>中</td>
+</tr>
+<tr>
+<td>共享内存</td>
+<td>0</td>
+<td>0.5</td>
+<td>1000+</td>
+<td>低</td>
+</tr>
+<tr>
+<td>Message Queue</td>
+<td>2</td>
+<td>6.0</td>
+<td>150</td>
+<td>高</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Linux传统IPC</strong>：</p>
+<ol>
+<li>
+<p><strong>管道（Pipe）</strong>
+   - 单向通信
+   - 缓冲区有限（64KB
+   - 适合父子进程</p>
+</li>
+<li>
+<p><strong>Socket</strong>
+   - 双向通信
+   - 支持网络通信
+   - 开销较大</p>
+</li>
+<li>
+<p><strong>消息队列</strong>
+   - 有序消息传递
+   - 消息大小限制
+   - 系统资源有限</p>
+</li>
+<li>
+<p><strong>共享内存</strong>
+   - 最快速度
+   - 需要同步机制
+   - 复杂度高</p>
+</li>
+</ol>
+<p><strong>iOS XPC/Mach端口</strong>：</p>
+<ul>
+<li>基于消息传递</li>
+<li>Mach消息头：描述消息类型和大小</li>
+<li>复杂类型：端口权限、内存对象</li>
+<li>out-of-line数据：大数据传输</li>
+<li>支持复杂的权限传递</li>
+<li>Send Right：发送权限</li>
+<li>Receive Right：接收权限</li>
+<li>Send Once Right：一次性发送</li>
+<li>性能特点</li>
+<li>延迟：3-4µs</li>
+<li>每次IPC需要内核态切换</li>
+<li>支持异步消息</li>
+</ul>
+<p><strong>鸿蒙软总线</strong>：</p>
+<ul>
+<li>支持跨设备IPC</li>
+<li>近场通信：Bluetooth/WiFi Direct</li>
+<li>远程通信：TCP/IP</li>
+<li>透明切换</li>
+<li>自动发现和连接</li>
+<li>mDNS/DNS-SD协议</li>
+<li>设备能力声明</li>
+<li>动态路由选择</li>
+<li>安全认证机制</li>
+<li>设备认证</li>
+<li>链路加密</li>
+<li>权限控制</li>
+</ul>
+<p><strong>Binder优势总结</strong>：</p>
+<ol>
+<li><strong>性能优先</strong>：只有1次数据拷贝</li>
+<li><strong>面向对象</strong>：自然的接口设计</li>
+<li><strong>线程管理</strong>：内核级线程池</li>
+<li><strong>安全性</strong>：UID/PID自动传递</li>
+<li><strong>稳定性</strong>：引用计数和死亡通知</li>
+</ol>
+<h2 id="24-ion">2.4 ION内存分配器</h2>
+<h3 id="241-ion">2.4.1 ION设计背景</h3>
+<p>ION（IONized memory allocator）是Android引入的统一内存管理框架，解决了多媒体设备内存分配的碎片化问题：</p>
+<p><strong>传统问题</strong>：</p>
+<ul>
+<li>各硬件厂商使用私有内存分配器</li>
+<li>不同组件间内存共享困难</li>
+<li>内存碎片严重</li>
+<li>缺乏统一的调试接口</li>
+</ul>
+<p><strong>ION目标</strong>：</p>
+<ol>
+<li>统一的内存分配接口</li>
+<li>支持多种内存类型（堆）</li>
+<li>高效的跨进程内存共享</li>
+<li>与DMA-BUF框架集成</li>
+</ol>
+<h3 id="242-ion">2.4.2 ION架构组成</h3>
+<p><strong>堆类型（Heap Types）</strong>：</p>
+<ol>
+<li>
+<p><strong>System Heap</strong>
+   - 使用kmalloc/vmalloc分配
+   - 适用于小块内存
+   - 支持缓存</p>
+</li>
+<li>
+<p><strong>System Contig Heap</strong>
+   - 分配物理连续内存
+   - 使用kzalloc
+   - 适用于需要连续内存的硬件</p>
+</li>
+<li>
+<p><strong>Carveout Heap</strong>
+   - 预留的物理内存区域
+   - 启动时通过设备树配置
+   - 用于特定硬件需求</p>
+</li>
+<li>
+<p><strong>CMA Heap</strong>
+   - Contiguous Memory Allocator
+   - 动态管理大块连续内存
+   - 平衡通用内存和特殊需求</p>
+</li>
+</ol>
+<p><strong>核心API</strong>：</p>
+<ul>
+<li><code>ion_alloc()</code>：分配内存</li>
+<li><code>ion_map_dma_buf()</code>：DMA映射</li>
+<li><code>ion_share_dma_buf_fd()</code>：导出文件描述符</li>
+<li><code>ion_import_dma_buf()</code>：导入共享内存</li>
+</ul>
+<h3 id="243-ion">2.4.3 ION使用场景</h3>
+<p><strong>图形缓冲区分配</strong>：</p>
+<div class="codehilite"><pre><span></span><code>SurfaceFlinger → Gralloc HAL → ION → GPU可访问内存
+</code></pre></div>
+
+<p><strong>相机数据流</strong>：</p>
+<div class="codehilite"><pre><span></span><code>Camera HAL → ION分配 → ISP处理 → 显示/编码
+</code></pre></div>
+
+<p><strong>视频编解码</strong>：</p>
+<div class="codehilite"><pre><span></span><code>MediaCodec → ION → Hardware Codec → 零拷贝输出
+</code></pre></div>
+
+<h3 id="244-ion">2.4.4 ION演进与替代</h3>
+<p>从Android 12开始，Google推荐使用DMA-BUF Heaps替代ION：</p>
+<p><strong>DMA-BUF Heaps优势</strong>：</p>
+<ul>
+<li>标准Linux接口</li>
+<li>更好的上游支持</li>
+<li>简化的API</li>
+<li>更灵活的堆管理</li>
+</ul>
+<p><strong>迁移考虑</strong>：</p>
+<ul>
+<li>保持HAL层兼容性</li>
+<li>性能特性评估</li>
+<li>厂商定制迁移</li>
+</ul>
+<h2 id="25-linux">2.5 与标准Linux内核的差异分析</h2>
+<h3 id="251">2.5.1 功能性差异</h3>
+<p><strong>Android特有功能</strong>：</p>
+<ol>
+<li>
+<p><strong>Binder IPC</strong>
+   - Linux：System V IPC、Socket、Pipe
+   - Android：Binder为主，效率更高</p>
+</li>
+<li>
+<p><strong>Wakelock/Suspend</strong>
+   - Linux：标准电源管理（pm_runtime）
+   - Android：更激进的休眠策略</p>
+</li>
+<li>
+<p><strong>内存管理</strong>
+   - Linux：OOM Killer保守策略
+   - Android：LMK/LMKD主动回收</p>
+</li>
+<li>
+<p><strong>安全模型</strong>
+   - Linux：DAC + SELinux（可选）
+   - Android：强制SELinux + 应用沙箱</p>
+</li>
+</ol>
+<h3 id="252">2.5.2 上游化努力</h3>
+<p>Google持续推动Android特性进入Linux主线：</p>
+<p><strong>已合并特性</strong>：</p>
+<ul>
+<li>suspend blocker → wakeup sources</li>
+<li>pmem → ION → DMA-BUF heaps</li>
+<li>logger → pstore/ramoops</li>
+</ul>
+<p><strong>进行中</strong>：</p>
+<ul>
+<li>Binder驱动优化</li>
+<li>Energy Aware Scheduling (EAS)</li>
+<li>PSI (Pressure Stall Information)</li>
+</ul>
+<h3 id="253-gki">2.5.3 GKI项目影响</h3>
+<p>Generic Kernel Image旨在解决Android内核碎片化：</p>
+<p><strong>架构变化</strong>：</p>
+<div class="codehilite"><pre><span></span><code>传统模式：
+SoC内核 + Android补丁 + OEM定制 → 设备内核
+
+GKI模式：
+通用内核镜像 + 厂商模块 → 标准化内核
+</code></pre></div>
+
+<p><strong>关键技术</strong>：</p>
+<ul>
+<li>KMI（Kernel Module Interface）稳定性</li>
+<li>符号列表管理</li>
+<li>模块签名验证</li>
+</ul>
+<h3 id="254">2.5.4 性能优化对比</h3>
+<p><strong>调度器定制</strong>：</p>
+<ul>
+<li>Linux CFS：公平性优先</li>
+<li>Android：响应性优先（SCHED_FIFO滥用）</li>
+<li>iOS：QoS等级系统</li>
+<li>鸿蒙：AI辅助调度</li>
+</ul>
+<p><strong>内存分配策略</strong>：</p>
+<ul>
+<li>Linux：buddy + slab分配器</li>
+<li>Android：增加ION、ZRAM</li>
+<li>iOS：zone allocator + compressor</li>
+<li>鸿蒙：分布式内存池</li>
+</ul>
+<p><strong>文件系统选择</strong>：</p>
+<ul>
+<li>Linux：ext4、btrfs为主</li>
+<li>Android：f2fs优化闪存</li>
+<li>iOS：APFS with encryption</li>
+<li>鸿蒙：EROFS只读压缩</li>
+</ul>
+<h2 id="_1">本章小结</h2>
+<p>Android内核层定制体现了移动设备的特殊需求：</p>
+<ol>
+<li><strong>内存管理</strong>：LMK/LMKD提供激进的内存回收策略，ION统一了多媒体内存分配</li>
+<li><strong>IPC机制</strong>：Binder提供高效的进程间通信，只需一次数据拷贝</li>
+<li><strong>电源优化</strong>：Wakelock等机制确保设备及时休眠，延长电池寿命</li>
+<li><strong>安全增强</strong>：强制SELinux和应用沙箱提供多层防护</li>
+<li><strong>标准化努力</strong>：GKI项目正在减少内核碎片化，提高可维护性</li>
+</ol>
+<p>关键公式：</p>
+<ul>
+<li>Binder传输效率：1次拷贝 vs 传统IPC 2次拷贝</li>
+<li>内存压力计算：<code>pressure = 1 - (available / total)</code></li>
+<li>OOM分数：<code>oom_score = base_score + oom_score_adj</code></li>
+</ul>
+<h2 id="_2">练习题</h2>
+<h3 id="_3">基础题</h3>
+<ol>
+<li><strong>Binder vs Socket性能分析</strong></li>
+</ol>
+<p>比较Binder和Unix Domain Socket在以下场景的性能差异：</p>
+<ul>
+<li>小数据量（&lt;1KB）频繁传输</li>
+<li>大数据量（&gt;1MB）传输</li>
+<li>多客户端并发请求</li>
+</ul>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑数据拷贝次数、内存映射开销、线程切换成本
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   小数据量频繁传输：Binder优势明显，因为只需1次拷贝，且有线程池管理。Socket需要2次拷贝，系统调用开销更大。
+
+   大数据量传输：差距缩小。Binder的1MB默认缓冲区可能需要分片，而Socket可以流式传输。但Binder仍有优势。
+
+   多客户端并发：Binder线程池（默认16线程）提供更好的并发处理。Socket需要应用层自行管理线程。
+
+   性能测试显示，Binder在大多数场景下比Socket快30-50%。
+   </details>
+<ol start="2">
+<li><strong>LMK阈值配置优化</strong></li>
+</ol>
+<p>某设备总内存2GB，如何配置合理的minfree阈值和对应的adj值？考虑以下应用场景：</p>
+<ul>
+<li>游戏为主的设备</li>
+<li>多任务办公设备</li>
+<li>低端入门设备</li>
+</ul>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑前台应用内存需求、后台保活数量、系统响应性要求
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   游戏设备（单应用优先）：
+
+   - minfree: 18432,23040,27648,32256,36864,46080 (页面数)
+   - 对应内存：72MB,90MB,108MB,126MB,144MB,180MB
+   - 更激进地杀后台，保证前台游戏性能
+
+   多任务设备（平衡策略）：
+
+   - minfree: 12288,15360,18432,21504,24576,30720
+   - 对应内存：48MB,60MB,72MB,84MB,96MB,120MB
+   - 保留更多后台应用，提升切换体验
+
+   低端设备（内存优先）：
+
+   - minfree: 8192,10240,12288,14336,16384,20480
+   - 对应内存：32MB,40MB,48MB,56MB,64MB,80MB
+   - 更早触发回收，防止系统卡顿
+   </details>
+<ol start="3">
+<li><strong>ION内存分配策略</strong></li>
+</ol>
+<p>设计一个相机应用的内存分配方案，需要处理：</p>
+<ul>
+<li>预览缓冲区（1920x1080，30fps）</li>
+<li>拍照缓冲区（4000x3000）</li>
+<li>视频录制缓冲区（3840x2160，60fps）</li>
+</ul>
+<p>选择合适的ION heap类型并说明理由。</p>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑内存大小、连续性要求、共享需求、缓存一致性
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   预览缓冲区：
+
+   - 使用System Heap或CMA Heap
+   - 大小：1920×1080×1.5（YUV420）×3缓冲 ≈ 9.3MB
+   - 需要CPU/GPU共享访问，缓存很重要
+
+   拍照缓冲区：
+
+   - 使用CMA Heap
+   - 大小：4000×3000×1.5 ≈ 18MB
+   - 需要ISP硬件访问，可能需要物理连续
+
+   视频录制：
+
+   - 使用Carveout Heap（如果有专用内存）或CMA Heap
+   - 大小：3840×2160×1.5×3缓冲 ≈ 37.3MB
+   - 编码器需要稳定的内存带宽
+
+   总体策略：优先CMA以平衡灵活性和性能，预留约100MB用于相机。
+   </details>
+<h3 id="_4">挑战题</h3>
+<ol start="4">
+<li><strong>Binder死亡通知机制实现</strong></li>
+</ol>
+<p>设计一个简化的Binder死亡通知系统，需要处理：</p>
+<ul>
+<li>服务进程意外退出检测</li>
+<li>客户端通知机制</li>
+<li>引用计数管理</li>
+<li>防止通知风暴</li>
+</ul>
+<p>描述关键数据结构和算法。</p>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   思考如何利用文件描述符、信号机制、内核对象生命周期
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   关键设计：
+
+   1. 数据结构：
+      - death_notification链表：每个binder_ref维护
+      - cookie标识：用户空间回调标识
+      - work队列：异步投递通知
+
+   2. 检测机制：
+      - 利用进程退出时的文件描述符清理
+      - binder_release()触发死亡通知流程
+      - 遍历该进程的所有binder_node
+
+   3. 通知投递：
+      - 异步机制防止阻塞内核
+      - BINDER_WORK_DEAD_BINDER工作项
+      - 批量处理减少上下文切换
+
+   4. 防止风暴：
+      - 限制每个ref的通知注册数量
+      - 合并相同进程的多个通知
+      - 设置通知投递间隔限制
+
+   5. 引用计数：
+      - strong ref：正常引用计数
+      - weak ref：仅用于死亡通知
+      - 防止循环引用导致泄漏
+   </details>
+<ol start="5">
+<li><strong>LMKD智能调度算法</strong></li>
+</ol>
+<p>设计一个基于机器学习的LMKD调度算法，考虑：</p>
+<ul>
+<li>应用使用模式预测</li>
+<li>内存压力趋势分析</li>
+<li>用户行为学习</li>
+<li>功耗优化平衡</li>
+</ul>
+<p>描述特征提取和决策逻辑。</p>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑时序特征、应用优先级、历史数据、系统状态
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   特征工程：
+
+   1. 应用特征：
+      - 启动频率和时间模式
+      - 内存使用增长率
+      - 前后台切换频率
+      - 与其他应用的关联性
+
+   2. 系统特征：
+      - 内存压力变化率
+      - swap使用情况
+      - CPU/GPU负载
+      - 电量状态
+
+   3. 用户特征：
+      - 使用时段分布
+      - 应用切换序列
+      - 任务完成时间
+      - 充电习惯
+
+   决策算法：
+
+   1. 短期预测（LSTM）：
+      - 预测未来5分钟内存需求
+      - 识别即将使用的应用
+      - 动态调整kill阈值
+
+   2. 长期学习（强化学习）：
+      - 奖励函数：应用启动速度、系统流畅度、功耗
+      - 动作空间：保留/杀死决策、内存压缩
+      - 状态空间：系统资源、应用状态矩阵
+
+   3. 实时决策：
+      - 基础规则保证系统稳定
+      - ML模型提供优化建议
+      - 渐进式部署，监控异常
+
+   4. 优化目标：
+      - 最小化冷启动次数
+      - 平衡内存使用率在70-85%
+      - 减少不必要的杀进程操作
+   </details>
+<ol start="6">
+<li><strong>跨平台IPC性能基准测试</strong></li>
+</ol>
+<p>设计一个综合测试框架，对比Android Binder、iOS XPC、鸿蒙软总线的性能。需要考虑：</p>
+<ul>
+<li>公平的测试场景</li>
+<li>延迟、吞吐量、CPU使用率</li>
+<li>不同负载模式</li>
+<li>安全开销影响</li>
+</ul>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   注意平台差异、测试隔离、统计意义、真实场景模拟
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   测试框架设计：
+
+   1. 测试场景标准化：
+      - Echo测试：最小延迟测量
+      - 数据传输：1B到10MB不同大小
+      - 并发测试：1-1000客户端
+      - 混合负载：模拟真实应用
+
+   2. 测量指标：
+      - RTT（往返时间）：P50/P90/P99
+      - 吞吐量：MB/s和transactions/s  
+      - CPU使用率：客户端+服务端+内核
+      - 内存占用：峰值和平均值
+      - 功耗影响：通过硬件测量
+
+   3. 平台适配：
+      - Android：NDK直接调用Binder
+      - iOS：NSXPCConnection封装
+      - 鸿蒙：分布式软总线API
+      - 统一的测试harness
+
+   4. 测试结果（预期）：
+      - 小消息延迟：Binder &lt; XPC &lt; 软总线
+      - 大数据吞吐：XPC ≈ Binder &lt; 软总线（跨设备）
+      - CPU效率：Binder最优（1次拷贝）
+      - 安全开销：XPC最高（权限检查）
+
+   5. 真实场景模拟：
+      - 相机预览流（持续高带宽）
+      - 传感器数据（高频小数据）
+      - 文件传输（大块数据）
+      - RPC调用（混合模式）
+   </details>
+<ol start="7">
+<li><strong>内核内存压缩优化</strong></li>
+</ol>
+<p>Android使用ZRAM进行内存压缩。设计一个自适应压缩策略：</p>
+<ul>
+<li>动态选择压缩算法（LZO/LZ4/ZSTD）</li>
+<li>智能选择压缩候选页面</li>
+<li>平衡压缩率和CPU开销</li>
+<li>与应用生命周期协调</li>
+</ul>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑页面访问频率、压缩率预测、CPU负载、电量状态
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   自适应策略设计：
+
+   1. 页面分类：
+      - Hot：频繁访问，不压缩
+      - Warm：偶尔访问，快速压缩（LZ4）
+      - Cold：很少访问，高压缩率（ZSTD）
+      - Frozen：应用后台，激进压缩
+
+   2. 算法选择逻辑：
+
+
+<div class="codehilite"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">cpu_load</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">80</span><span class="o">%</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">use_lzo</span><span class="p">();</span><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="err">最快</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">memory_pressure</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">90</span><span class="o">%</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">use_zstd</span><span class="p">();</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="err">最高压缩率</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">use_lz4</span><span class="p">();</span><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="err">平衡选择</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+
+   3. 压缩候选评分：
+      - 访问时间距离：time_since_access
+      - 页面类型：anon &gt; file-backed
+      - 应用优先级：根据adj值
+      - 预测压缩率：采样估计
+
+   4. 实现机制：
+      - 页面老化跟踪（PTE accessed bit）
+      - 压缩率统计表
+      - CPU使用率监控
+      - 与LMKD协调
+
+   5. 优化效果：
+      - 内存利用率提升30-50%
+      - CPU开销控制在5%以内
+      - 应用切换延迟减少20%
+      - 电量影响小于3%
+   </details>
+<ol start="8">
+<li><strong>GKI兼容性验证系统</strong></li>
+</ol>
+<p>设计一个自动化系统验证厂商内核模块与GKI的兼容性：</p>
+<ul>
+<li>KMI稳定性检查</li>
+<li>性能回归测试</li>
+<li>安全合规验证</li>
+<li>向后兼容性保证</li>
+</ul>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑符号依赖、ABI兼容性、性能基准、安全边界
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   验证系统架构：
+
+   1. 静态分析：
+      - 符号依赖扫描（readelf/nm）
+      - KMI白名单检查
+      - 数据结构大小验证
+      - 函数签名匹配
+
+   2. 动态测试：
+      - 模块加载/卸载循环
+      - 压力测试（并发、边界）
+      - 功能覆盖率测试
+      - 异常注入测试
+
+   3. 性能验证：
+      - 基准测试对比（±5%阈值）
+      - 内存/CPU开销分析
+      - 延迟敏感路径测试
+      - 功耗影响评估
+
+   4. 安全检查：
+      - SELinux策略验证
+      - 权限边界测试
+      - 漏洞扫描（静态+动态）
+      - 模糊测试
+
+   5. 兼容性矩阵：
+
+
+<div class="codehilite"><pre><span></span><code>GKI版本 × 模块版本 × 设备配置 = 测试结果
+</code></pre></div>
+
+
+
+   6. CI/CD集成：
+      - 每次提交触发验证
+      - 增量测试优化
+      - 自动生成兼容性报告
+      - 问题自动定位
+
+   7. 认证流程：
+      - 自动化测试通过
+      - 人工审核高风险项
+      - 签名和版本管理
+      - OTA更新验证
+   </details>
+<h2 id="gotchas">常见陷阱与错误 (Gotchas)</h2>
+<ol>
+<li>
+<p><strong>Binder内存泄漏</strong>
+   - 错误：忘记释放Binder引用
+   - 后果：内存泄漏，最终系统崩溃
+   - 解决：使用sp&lt;&gt;智能指针，注册死亡通知</p>
+</li>
+<li>
+<p><strong>LMK配置过激进</strong>
+   - 错误：minfree阈值设置过高
+   - 后果：频繁杀后台，应用不断冷启动
+   - 解决：根据设备内存和使用场景调优</p>
+</li>
+<li>
+<p><strong>ION内存映射错误</strong>
+   - 错误：CPU/设备访问权限不匹配
+   - 后果：数据损坏或系统崩溃
+   - 解决：正确设置heap类型和flags</p>
+</li>
+<li>
+<p><strong>内核模块版本不匹配</strong>
+   - 错误：使用错误版本的内核模块
+   - 后果：符号未定义，加载失败
+   - 解决：严格版本管理，使用GKI</p>
+</li>
+<li>
+<p><strong>Wakelock滥用</strong>
+   - 错误：持有wakelock时间过长
+   - 后果：电池快速耗尽
+   - 解决：及时释放，使用超时机制</p>
+</li>
+<li>
+<p><strong>SELinux权限遗漏</strong>
+   - 错误：新增内核功能未更新策略
+   - 后果：权限拒绝，功能异常
+   - 解决：完整测试，及时更新策略</p>
+</li>
+</ol>
+<h2 id="_5">最佳实践检查清单</h2>
+<h3 id="_6">内核定制审查要点</h3>
+<ul>
+<li>[ ] <strong>性能影响评估</strong></li>
+<li>基准测试对比</li>
+<li>CPU/内存开销分析</li>
+<li>
+<p>功耗影响测量</p>
+</li>
+<li>
+<p>[ ] <strong>兼容性验证</strong></p>
+</li>
+<li>GKI兼容性测试</li>
+<li>HAL接口稳定性</li>
+<li>
+<p>用户空间API不变</p>
+</li>
+<li>
+<p>[ ] <strong>安全加固</strong></p>
+</li>
+<li>SELinux策略完整性</li>
+<li>权限最小化原则</li>
+<li>
+<p>漏洞扫描通过</p>
+</li>
+<li>
+<p>[ ] <strong>内存管理</strong></p>
+</li>
+<li>无内存泄漏（kmemleak）</li>
+<li>压力测试通过</li>
+<li>
+<p>OOM场景处理正确</p>
+</li>
+<li>
+<p>[ ] <strong>电源优化</strong></p>
+</li>
+<li>休眠/唤醒正常</li>
+<li>无异常功耗</li>
+<li>
+<p>Wakelock使用合理</p>
+</li>
+<li>
+<p>[ ] <strong>调试支持</strong></p>
+</li>
+<li>日志级别可配置</li>
+<li>关键路径可追踪</li>
+<li>
+<p>错误信息有意义</p>
+</li>
+<li>
+<p>[ ] <strong>上游对齐</strong></p>
+</li>
+<li>评估mainline方案</li>
+<li>最小化私有修改</li>
+<li>
+<p>文档完整性</p>
+</li>
+<li>
+<p>[ ] <strong>测试覆盖</strong></p>
+</li>
+<li>单元测试完备</li>
+<li>集成测试通过</li>
+<li>压力测试稳定</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="chapter1.html" class="nav-link prev">← 第1章：Android系统架构概览</a><a href="chapter3.html" class="nav-link next">第3章：硬件抽象层(HAL) →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

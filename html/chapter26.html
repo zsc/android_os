@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="./">
+    <title>第26章：Android虚拟化技术</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/highlight.css">
+    <script src="assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors', 'ams']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors', '[tex]/ams']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="sidebar-search-input" placeholder="搜索..." autocomplete="off">
+            </div>
+            <div id="tree-container">
+                <nav class="tree-nav" role="tree">
+                    <div class="tree-item " >
+                        <a href="index.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter1.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第1章：Android系统架构概览</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter2.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第2章：Linux内核层定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter3.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第3章：硬件抽象层(HAL)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter4.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第4章：Init进程与系统启动</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter5.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第5章：Zygote与应用进程管理</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter6.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第6章：Android Runtime (ART)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter7.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第7章：Binder IPC机制深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter8.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第8章：系统服务架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter9.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第9章：ContentProvider与数据共享</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter10.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第10章：Android图形系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter11.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第11章：音频系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter12.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第12章：相机与多媒体框架</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter13.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第13章：Android安全模型</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter14.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第14章：密钥管理与硬件安全</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter15.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第15章：漏洞案例分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter16.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第16章：Neural Networks API (NNAPI)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter17.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第17章：TensorFlow Lite集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter18.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第18章：ML Kit与设备端AI</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter19.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第19章：NPU/TPU硬件加速</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter20.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第20章：协处理器系统集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter21.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第21章：MIUI系统架构剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter22.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第22章：ColorOS/EMUI技术分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter23.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第23章：厂商内核与驱动定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter24.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第24章：厂商AI能力对比</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter25.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第25章：OriginOS深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item active" >
+                        <a href="chapter26.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第26章：Android虚拟化技术</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter27.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第27章：实时性与性能优化</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter28.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第28章：逆向工程与安全研究</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter29.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第29章：Android未来演进</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter30.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录A：调试工具与技巧</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter31.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录B：源码编译与定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter32.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第32章：参考资源</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="CLAUDE.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">AndroidOS原理教程项目说明</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="README.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="26android">第26章：Android虚拟化技术</h1>
+<p>Android虚拟化技术是系统安全和功能隔离的基石。从早期简单的UID隔离到现代复杂的容器化架构，Android在虚拟化道路上不断演进。本章将深入剖析Android虚拟化技术栈，包括容器化应用、多用户系统、工作资料机制以及相关的安全增强措施。通过与iOS等系统的对比，我们将全面理解Android虚拟化的设计理念和实现细节。</p>
+<h2 id="261">26.1 容器化技术应用</h2>
+<h3 id="2611-android">26.1.1 Android容器化基础架构</h3>
+<p>Android的容器化技术建立在Linux内核的Namespace和Cgroup机制之上，但针对移动场景做了大量优化和定制。</p>
+<p><strong>Namespace隔离层次</strong>：</p>
+<ul>
+<li>PID Namespace：每个应用拥有独立的进程空间</li>
+<li>Mount Namespace：隔离文件系统视图</li>
+<li>Network Namespace：网络栈隔离（部分场景）</li>
+<li>User Namespace：UID/GID映射（Android 10+）</li>
+<li>UTS Namespace：主机名隔离</li>
+<li>IPC Namespace：SystemV IPC隔离</li>
+</ul>
+<p>Android通过<code>clone()</code>系统调用的<code>CLONE_NEW*</code>标志创建新的namespace：</p>
+<ul>
+<li>Zygote fork时设置<code>CLONE_NEWNS</code></li>
+<li>特权应用可能使用<code>CLONE_NEWNET</code></li>
+<li>隔离进程使用<code>CLONE_NEWPID</code></li>
+</ul>
+<p><strong>Cgroup资源控制</strong>：
+Android使用Cgroup v1进行资源管理：</p>
+<ul>
+<li>cpu：CPU时间片分配</li>
+<li>cpuset：CPU亲和性设置</li>
+<li>memory：内存限制和统计</li>
+<li>blkio：块设备I/O限制</li>
+<li>freezer：进程冻结/解冻</li>
+</ul>
+<p>关键cgroup路径：</p>
+<ul>
+<li><code>/dev/cpuctl/</code>：CPU控制组</li>
+<li><code>/dev/cpuset/</code>：CPU集合控制</li>
+<li><code>/dev/memcg/</code>：内存控制组</li>
+<li><code>/dev/blkio/</code>：块I/O控制</li>
+</ul>
+<h3 id="2612-app">26.1.2 App沙箱与进程隔离机制</h3>
+<p>Android的应用沙箱是其安全模型的核心，每个应用运行在独立的Linux用户下。</p>
+<p><strong>UID分配机制</strong>：</p>
+<ul>
+<li>应用UID范围：10000-19999（AID_APP_START到AID_APP_END）</li>
+<li>隔离进程UID：99000-99999（AID_ISOLATED_START到AID_ISOLATED_END）</li>
+<li>系统UID：1000-9999（预定义系统服务）</li>
+</ul>
+<p><strong>文件系统隔离</strong>：</p>
+<ul>
+<li>私有数据目录：<code>/data/data/&lt;package_name&gt;/</code></li>
+<li>外部存储隔离：<code>/storage/emulated/&lt;userId&gt;/&lt;package_name&gt;/</code></li>
+<li>OBB挂载点：<code>/mnt/obb/&lt;package_name&gt;/</code></li>
+</ul>
+<p><strong>进程隔离增强</strong>：</p>
+<ul>
+<li>Seccomp-BPF：限制系统调用</li>
+<li>SELinux域：<code>u:r:untrusted_app:s0</code></li>
+<li>能力(Capabilities)剥离：<code>capset()</code>清空能力集</li>
+</ul>
+<h3 id="2613-android-runtime-namespace-art-ns">26.1.3 Android Runtime Namespace (ART NS)</h3>
+<p>ART虚拟机层面的隔离机制提供了额外的安全保障。</p>
+<p><strong>ClassLoader隔离</strong>：</p>
+<ul>
+<li>PathClassLoader：应用类加载</li>
+<li>DexClassLoader：动态加载</li>
+<li>InMemoryDexClassLoader：内存DEX加载（Android 8.0+）</li>
+</ul>
+<p><strong>JNI命名空间</strong>：</p>
+<ul>
+<li>公共命名空间：系统库</li>
+<li>应用命名空间：私有native库</li>
+<li>Vendor命名空间：厂商HAL库</li>
+</ul>
+<p>通过<code>android_dlopen_ext()</code>控制库搜索路径：</p>
+<ul>
+<li><code>ANDROID_DLEXT_USE_NAMESPACE</code>：指定命名空间</li>
+<li><code>ANDROID_DLEXT_USE_LIBRARY_FD</code>：直接使用文件描述符</li>
+</ul>
+<h3 id="2614">26.1.4 容器化网络隔离</h3>
+<p>Android的网络隔离主要通过UID-based防火墙规则实现。</p>
+<p><strong>Netfilter/iptables规则</strong>：</p>
+<ul>
+<li>INPUT链：基于UID的入站控制</li>
+<li>OUTPUT链：应用出站流量控制</li>
+<li>nat表：网络地址转换</li>
+<li>mangle表：包标记和修改</li>
+</ul>
+<p><strong>网络权限映射</strong>：</p>
+<ul>
+<li>INTERNET权限：允许网络访问</li>
+<li>特定UID范围：VPN应用（AID_VPN）</li>
+<li>系统应用：绕过某些限制</li>
+</ul>
+<p><strong>eBPF网络程序</strong>（Android 9+）：</p>
+<ul>
+<li>流量统计：<code>BPF_PROG_TYPE_CGROUP_SKB</code></li>
+<li>流量控制：<code>BPF_PROG_TYPE_CGROUP_SOCK</code></li>
+<li>性能监控：<code>BPF_PROG_TYPE_TRACEPOINT</code></li>
+</ul>
+<h3 id="2615-linux">26.1.5 与Linux容器技术的差异</h3>
+<p>Android容器化与传统Linux容器（如Docker）存在显著差异：</p>
+<p><strong>设计目标差异</strong>：</p>
+<ul>
+<li>Android：应用隔离、安全为主</li>
+<li>Linux容器：服务部署、资源利用</li>
+</ul>
+<p><strong>实现差异</strong>：</p>
+<ul>
+<li>无完整的容器运行时</li>
+<li>不支持容器镜像概念</li>
+<li>深度集成ActivityManager</li>
+<li>针对移动设备优化</li>
+</ul>
+<p><strong>性能考量</strong>：</p>
+<ul>
+<li>启动速度优先（Zygote预加载）</li>
+<li>内存效率（共享系统库）</li>
+<li>电池寿命（aggressive杀进程）</li>
+</ul>
+<h2 id="262">26.2 多用户与工作资料</h2>
+<h3 id="2621-multi-user">26.2.1 Multi-User架构设计</h3>
+<p>Android的多用户系统从Android 4.2开始引入，支持在同一设备上创建多个独立的用户环境。</p>
+<p><strong>用户类型分类</strong>：</p>
+<ul>
+<li>主用户（Primary User）：userId=0</li>
+<li>次要用户（Secondary User）：userId≥10</li>
+<li>访客用户（Guest User）：临时用户</li>
+<li>受限用户（Restricted User）：权限受限</li>
+<li>管理用户（Managed Profile）：工作资料</li>
+</ul>
+<p><strong>UserManagerService核心功能</strong>：</p>
+<ul>
+<li>用户创建/删除：<code>createUser()</code>, <code>removeUser()</code></li>
+<li>用户切换：<code>switchUser()</code></li>
+<li>用户状态管理：启动、停止、解锁</li>
+<li>用户限制：<code>setUserRestriction()</code></li>
+</ul>
+<p><strong>用户数据隔离</strong>：</p>
+<ul>
+<li>用户数据目录：<code>/data/user/&lt;userId&gt;/</code></li>
+<li>用户系统目录：<code>/data/system/users/&lt;userId&gt;/</code></li>
+<li>媒体数据：<code>/data/media/&lt;userId&gt;/</code></li>
+<li>外部存储：<code>/storage/emulated/&lt;userId&gt;/</code></li>
+</ul>
+<h3 id="2622">26.2.2 用户切换流程</h3>
+<p>用户切换涉及系统多个组件的协调：</p>
+<ol>
+<li>
+<p><strong>ActivityManager处理</strong>：
+   - 停止当前用户Activity
+   - 保存当前用户状态
+   - 冻结后台进程</p>
+</li>
+<li>
+<p><strong>系统服务切换</strong>：
+   - NotificationManager清理通知
+   - AudioService切换音频配置
+   - WallpaperManager更新壁纸</p>
+</li>
+<li>
+<p><strong>存储卷切换</strong>：
+   - 卸载当前用户存储
+   - 挂载新用户存储
+   - 更新存储权限</p>
+</li>
+<li>
+<p><strong>界面切换</strong>：
+   - SystemUI更新状态栏
+   - Launcher重新加载
+   - 锁屏界面更新</p>
+</li>
+</ol>
+<h3 id="2623-work-profile">26.2.3 工作资料(Work Profile)技术架构</h3>
+<p>工作资料是Android Enterprise的核心功能，实现个人和工作数据的隔离。</p>
+<p><strong>Profile创建流程</strong>：</p>
+<ol>
+<li>DevicePolicyManager.createAndManageUser()</li>
+<li>设置Profile Owner应用</li>
+<li>配置跨Profile权限</li>
+<li>启动Profile服务</li>
+</ol>
+<p><strong>跨Profile通信机制</strong>：</p>
+<ul>
+<li>CrossProfileApps API：应用间通信</li>
+<li>Intent转发：<code>Intent.ACTION_SEND</code>等</li>
+<li>内容共享：<code>FileProvider</code>跨Profile</li>
+<li>通知同步：部分通知可跨Profile显示</li>
+</ul>
+<p><strong>Profile管理策略</strong>：</p>
+<ul>
+<li>应用白名单/黑名单</li>
+<li>数据传输限制</li>
+<li>相机/截屏禁用</li>
+<li>VPN强制连接</li>
+</ul>
+<h3 id="2624">26.2.4 跨用户数据隔离机制</h3>
+<p>Android通过多层机制确保用户间数据隔离：</p>
+<p><strong>文件系统层</strong>：</p>
+<ul>
+<li>UID偏移：userId * 100000 + appId</li>
+<li>SELinux标签：包含userId信息</li>
+<li>文件权限：严格的DAC控制</li>
+</ul>
+<p><strong>Framework层</strong>：</p>
+<ul>
+<li>ContentProvider：检查调用者userId</li>
+<li>Service绑定：限制跨用户绑定</li>
+<li>Broadcast：用户特定广播</li>
+</ul>
+<p><strong>存储加密</strong>：</p>
+<ul>
+<li>FBE（File-Based Encryption）：每用户独立密钥</li>
+<li>Keystore：用户特定密钥存储</li>
+<li>凭据加密存储：<code>/data/misc/keystore/user_&lt;userId&gt;/</code></li>
+</ul>
+<h3 id="2625-device-ownerprofile-owner">26.2.5 Device Owner与Profile Owner权限模型</h3>
+<p>Android设备管理通过不同级别的所有者实现：</p>
+<p><strong>Device Owner权限</strong>：</p>
+<ul>
+<li>设备级别策略：全局密码要求</li>
+<li>系统更新控制：OTA延迟/强制</li>
+<li>应用管理：静默安装/卸载</li>
+<li>网络配置：全局代理设置</li>
+</ul>
+<p><strong>Profile Owner权限</strong>：</p>
+<ul>
+<li>Profile应用管理</li>
+<li>Profile数据擦除</li>
+<li>证书管理</li>
+<li>VPN配置</li>
+</ul>
+<p><strong>DPC (Device Policy Controller) 实现</strong>：</p>
+<ul>
+<li>DeviceAdminReceiver：接收管理事件</li>
+<li>DevicePolicyManager：执行策略</li>
+<li>策略同步：与EMM服务器通信</li>
+</ul>
+<h2 id="263">26.3 虚拟化安全增强</h2>
+<h3 id="2631-selinux">26.3.1 SELinux在虚拟化中的应用</h3>
+<p>SELinux是Android安全架构的核心组件，在虚拟化环境中提供强制访问控制。</p>
+<p><strong>SELinux域隔离</strong>：</p>
+<ul>
+<li>应用域：<code>untrusted_app</code>, <code>priv_app</code>, <code>system_app</code></li>
+<li>隔离服务域：<code>isolated_app</code></li>
+<li>虚拟化域：<code>virtualizationservice</code></li>
+</ul>
+<p><strong>类型转换规则</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="err">#</span><span class="w"> </span><span class="nx">Zygote</span><span class="w"> </span><span class="nx">fork应用进程</span>
+<span class="nx">type_transition</span><span class="w"> </span><span class="nx">zygote</span><span class="w"> </span><span class="nx">apk_data_file</span><span class="p">:</span><span class="nx">process</span><span class="w"> </span><span class="nx">untrusted_app</span><span class="p">;</span>
+
+<span class="err">#</span><span class="w"> </span><span class="nx">隔离进程转换</span>
+<span class="nx">type_transition</span><span class="w"> </span><span class="nx">untrusted_app</span><span class="w"> </span><span class="nx">isolated_app_data_file</span><span class="p">:</span><span class="nx">process</span><span class="w"> </span><span class="nx">isolated_app</span><span class="p">;</span>
+</code></pre></div>
+
+<p><strong>MLS (Multi-Level Security) 支持</strong>：</p>
+<ul>
+<li>敏感度级别：s0-s0:c512,c768</li>
+<li>类别隔离：基于应用UID</li>
+<li>跨级别访问控制</li>
+</ul>
+<h3 id="2632-seccomp-bpf">26.3.2 Seccomp-BPF系统调用过滤</h3>
+<p>Seccomp-BPF提供细粒度的系统调用过滤，增强沙箱安全性。</p>
+<p><strong>过滤策略加载</strong>：</p>
+<ul>
+<li>Zygote预加载：<code>InitializeSeccompFilter()</code></li>
+<li>应用特定过滤：<code>SetSeccompFilter()</code></li>
+<li>架构相关规则：arm64/arm32差异处理</li>
+</ul>
+<p><strong>典型过滤规则</strong>：</p>
+<ul>
+<li>禁用危险调用：<code>mount</code>, <code>umount</code>, <code>ptrace</code></li>
+<li>限制网络调用：仅允许特定socket类型</li>
+<li>文件系统限制：禁止特定路径访问</li>
+</ul>
+<p><strong>性能优化</strong>：</p>
+<ul>
+<li>JIT编译BPF程序</li>
+<li>缓存编译结果</li>
+<li>批量规则加载</li>
+</ul>
+<h3 id="2633">26.3.3 虚拟化环境下的权限隔离</h3>
+<p>Android在虚拟化环境中实施多层权限隔离：</p>
+<p><strong>Linux Capabilities剥离</strong>：</p>
+<ul>
+<li>应用进程：完全剥离所有capabilities</li>
+<li>系统服务：最小权限原则</li>
+<li>特权操作：通过IPC请求系统服务</li>
+</ul>
+<p><strong>文件系统权限</strong>：</p>
+<ul>
+<li>私有目录：700权限</li>
+<li>共享存储：基于FUSE的动态权限</li>
+<li>系统文件：只读挂载</li>
+</ul>
+<p><strong>Binder权限检查</strong>：</p>
+<ul>
+<li>UID/PID验证</li>
+<li>Permission检查</li>
+<li>AppOp额外控制</li>
+</ul>
+<h3 id="2634-hardware-backed-keystore">26.3.4 Hardware-backed Keystore隔离</h3>
+<p>硬件安全模块提供密钥隔离和加密操作：</p>
+<p><strong>Keymaster/KeyMint HAL</strong>：</p>
+<ul>
+<li>密钥生成：硬件随机数</li>
+<li>密钥存储：安全元件/TEE</li>
+<li>加密操作：硬件加速</li>
+</ul>
+<p><strong>密钥隔离机制</strong>：</p>
+<ul>
+<li>应用密钥绑定：UID + 别名</li>
+<li>密钥访问控制：认证要求</li>
+<li>密钥证明：证书链验证</li>
+</ul>
+<p><strong>StrongBox实现</strong>（Android 9+）：</p>
+<ul>
+<li>专用安全芯片</li>
+<li>抗物理攻击</li>
+<li>独立安全处理器</li>
+</ul>
+<h3 id="2635-virtualization-based-security-vbs">26.3.5 Virtualization-based Security (VBS)</h3>
+<p>Android正在探索基于虚拟化的安全增强：</p>
+<p><strong>pKVM (Protected KVM)</strong>：</p>
+<ul>
+<li>Type-1 Hypervisor</li>
+<li>保护客户VM内存</li>
+<li>设备直通支持</li>
+</ul>
+<p><strong>应用场景</strong>：</p>
+<ul>
+<li>DRM内容保护</li>
+<li>生物识别数据隔离</li>
+<li>密钥管理服务</li>
+</ul>
+<p><strong>性能考量</strong>：</p>
+<ul>
+<li>硬件虚拟化扩展（VHE）</li>
+<li>Stage-2页表管理</li>
+<li>中断虚拟化</li>
+</ul>
+<h2 id="264-ios">26.4 与iOS虚拟化对比</h2>
+<h3 id="2641-ios">26.4.1 iOS沙箱模型分析</h3>
+<p>iOS采用了与Android不同的沙箱实现策略，更依赖于内核级强制和代码签名。</p>
+<p><strong>iOS沙箱特点</strong>：</p>
+<ul>
+<li>Seatbelt沙箱（基于TrustedBSD MAC）</li>
+<li>沙箱配置文件（.sb文件）</li>
+<li>强制代码签名</li>
+<li>Entitlements权限系统</li>
+</ul>
+<p><strong>沙箱Profile结构</strong>：</p>
+<ul>
+<li>默认拒绝策略</li>
+<li>细粒度文件系统规则</li>
+<li>Mach IPC限制</li>
+<li>系统调用过滤</li>
+</ul>
+<p><strong>iOS容器结构</strong>：</p>
+<ul>
+<li>Bundle容器：应用二进制和资源</li>
+<li>Data容器：应用私有数据</li>
+<li>Group容器：应用组共享数据</li>
+</ul>
+<h3 id="2642-android-vs-ios">26.4.2 Android vs iOS进程隔离策略</h3>
+<p>两个平台在进程隔离上采用了不同的技术路线：</p>
+<p><strong>Android进程隔离</strong>：</p>
+<ul>
+<li>基于Linux UID/GID</li>
+<li>SELinux MAC层</li>
+<li>Namespace隔离</li>
+<li>Seccomp-BPF过滤</li>
+</ul>
+<p><strong>iOS进程隔离</strong>：</p>
+<ul>
+<li>BSD进程模型</li>
+<li>Seatbelt沙箱策略</li>
+<li>XPC服务架构</li>
+<li>Mach端口权限</li>
+</ul>
+<p><strong>隔离粒度对比</strong>：</p>
+<p>| 特性 | Android | iOS |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>Android</th>
+<th>iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>进程模型</td>
+<td>Linux进程+UID隔离</td>
+<td>BSD进程+沙箱Profile</td>
+</tr>
+<tr>
+<td>IPC机制</td>
+<td>Binder</td>
+<td>XPC/Mach消息</td>
+</tr>
+<tr>
+<td>文件隔离</td>
+<td>UID+SELinux</td>
+<td>沙箱规则+POSIX</td>
+</tr>
+<tr>
+<td>网络隔离</td>
+<td>UID防火墙</td>
+<td>沙箱网络规则</td>
+</tr>
+<tr>
+<td>代码执行</td>
+<td>DEX验证+JIT/AOT</td>
+<td>强制代码签名</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2643">26.4.3 虚拟化性能影响对比</h3>
+<p><strong>Android性能特征</strong>：</p>
+<ul>
+<li>Zygote预加载减少启动时间</li>
+<li>共享运行时库降低内存使用</li>
+<li>JIT/AOT混合编译</li>
+<li>运行时GC开销</li>
+</ul>
+<p><strong>iOS性能特征</strong>：</p>
+<ul>
+<li>原生代码执行效率</li>
+<li>无GC开销</li>
+<li>Metal图形加速</li>
+<li>统一内存架构优势</li>
+</ul>
+<p><strong>内存管理差异</strong>：</p>
+<ul>
+<li>Android：Dalvik/ART堆管理，LMK/LMKD</li>
+<li>iOS：Jetsam内存压力处理，内存压缩</li>
+</ul>
+<p><strong>启动性能对比</strong>：</p>
+<ul>
+<li>Android冷启动：200-800ms（取决于应用）</li>
+<li>iOS冷启动：150-600ms（取决于应用）</li>
+<li>Android温启动优势：Zygote fork</li>
+<li>iOS温启动：进程缓存</li>
+</ul>
+<h3 id="2644">26.4.4 安全模型差异分析</h3>
+<p><strong>权限模型</strong>：</p>
+<p>Android权限系统：</p>
+<ul>
+<li>安装时权限（Android 6.0前）</li>
+<li>运行时权限（Android 6.0+）</li>
+<li>特殊权限（系统设置授予）</li>
+<li>AppOps细粒度控制</li>
+</ul>
+<p>iOS权限系统：</p>
+<ul>
+<li>首次使用时请求</li>
+<li>隐私设置集中管理</li>
+<li>临时精确位置权限</li>
+<li>App Tracking Transparency</li>
+</ul>
+<p><strong>数据保护</strong>：</p>
+<p>Android数据保护：</p>
+<ul>
+<li>全盘加密（FDE，已废弃）</li>
+<li>文件级加密（FBE）</li>
+<li>Adoptable Storage</li>
+<li>密钥派生函数</li>
+</ul>
+<p>iOS数据保护：</p>
+<ul>
+<li>数据保护类（Protection Classes）</li>
+<li>文件级加密密钥层次</li>
+<li>Secure Enclave处理</li>
+<li>硬件密钥包装</li>
+</ul>
+<p><strong>漏洞缓解措施对比</strong>：</p>
+<p>| 缓解技术 | Android | iOS |</p>
+<table>
+<thead>
+<tr>
+<th>缓解技术</th>
+<th>Android</th>
+<th>iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ASLR</td>
+<td>完整ASLR（PIE）</td>
+<td>完整ASLR</td>
+</tr>
+<tr>
+<td>DEP/NX</td>
+<td>W^X执行保护</td>
+<td>W^X执行保护</td>
+</tr>
+<tr>
+<td>栈保护</td>
+<td>Stack Canaries</td>
+<td>Stack Canaries</td>
+</tr>
+<tr>
+<td>CFI</td>
+<td>LLVM CFI（部分）</td>
+<td>全面CFI</td>
+</tr>
+<tr>
+<td>沙箱逃逸防护</td>
+<td>SELinux+Seccomp</td>
+<td>Seatbelt+代码签名</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2645">26.4.5 虚拟化技术发展趋势</h3>
+<p><strong>Android未来方向</strong>：</p>
+<ul>
+<li>Microdroid轻量级VM</li>
+<li>pKVM保护虚拟机</li>
+<li>基于Rust的安全组件</li>
+<li>eBPF增强运行时</li>
+</ul>
+<p><strong>iOS未来方向</strong>：</p>
+<ul>
+<li>虚拟化框架（macOS技术下放）</li>
+<li>更严格的沙箱策略</li>
+<li>差分隐私技术</li>
+<li>设备端机器学习隔离</li>
+</ul>
+<p><strong>共同趋势</strong>：</p>
+<ul>
+<li>硬件安全特性利用</li>
+<li>零信任安全架构</li>
+<li>隐私计算技术</li>
+<li>跨平台虚拟化标准</li>
+</ul>
+<h2 id="_1">本章小结</h2>
+<p>本章深入探讨了Android虚拟化技术的各个层面：</p>
+<ol>
+<li>
+<p><strong>容器化技术</strong>：基于Linux Namespace和Cgroup的应用隔离，配合ART运行时隔离和网络隔离，构建了Android独特的容器化架构。</p>
+</li>
+<li>
+<p><strong>多用户系统</strong>：通过UserManagerService实现的多用户支持，以及工作资料（Work Profile）提供的企业级数据隔离方案。</p>
+</li>
+<li>
+<p><strong>安全增强</strong>：SELinux强制访问控制、Seccomp-BPF系统调用过滤、硬件安全模块支持等多层防护机制。</p>
+</li>
+<li>
+<p><strong>平台对比</strong>：Android基于Linux的虚拟化方案与iOS基于BSD的沙箱模型各有特色，在性能和安全性上各有权衡。</p>
+</li>
+</ol>
+<p>关键技术要点：</p>
+<ul>
+<li>UID隔离是Android安全模型的基础</li>
+<li>Namespace提供进程级资源隔离</li>
+<li>SELinux实施强制访问控制</li>
+<li>工作资料实现企业数据隔离</li>
+<li>硬件安全特性提供可信执行环境</li>
+</ul>
+<h2 id="_2">练习题</h2>
+<h3 id="_3">基础题</h3>
+<ol>
+<li><strong>Android应用沙箱UID分配</strong></li>
+</ol>
+<details>
+<summary>Hint: 考虑应用UID的范围和计算方式</summary>
+<p>问题：如果一个应用的包名对应的appId是10145，在userId=0（主用户）和userId=10（次要用户）下，该应用进程的实际UID分别是多少？</p>
+<p>答案：</p>
+<ul>
+<li>主用户（userId=0）：UID = 0 * 100000 + 10145 = 10145</li>
+<li>次要用户（userId=10）：UID = 10 * 100000 + 10145 = 1010145</li>
+</ul>
+<p>计算公式：actualUid = userId * PER_USER_RANGE + appId，其中PER_USER_RANGE = 100000</p>
+</details>
+<ol start="2">
+<li><strong>Namespace隔离机制</strong></li>
+</ol>
+<details>
+<summary>Hint: 思考每种Namespace的作用</summary>
+<p>问题：列举Android中使用的Linux Namespace类型，并说明每种Namespace在应用隔离中的具体作用。</p>
+<p>答案：</p>
+<ul>
+<li>PID Namespace：隔离进程ID空间，应用只能看到自己的进程</li>
+<li>Mount Namespace：隔离挂载点，实现私有存储目录</li>
+<li>Network Namespace：网络栈隔离（VPN应用使用）</li>
+<li>User Namespace：UID/GID映射（Android 10+增强隔离）</li>
+<li>UTS Namespace：主机名隔离（较少使用）</li>
+<li>IPC Namespace：SystemV IPC隔离（限制共享内存访问）</li>
+</ul>
+</details>
+<ol start="3">
+<li><strong>SELinux域转换</strong></li>
+</ol>
+<details>
+<summary>Hint: 考虑Zygote fork的过程</summary>
+<p>问题：描述从zygote进程fork出普通应用进程时的SELinux域转换过程，包括相关的策略规则。</p>
+<p>答案：</p>
+<ol>
+<li>Zygote运行在<code>zygote</code>域</li>
+<li>Fork新进程时，根据应用类型设置域转换</li>
+<li>普通应用转换到<code>untrusted_app</code>域</li>
+<li>转换规则：<code>type_transition zygote apk_data_file:process untrusted_app;</code></li>
+<li>系统应用可能转换到<code>system_app</code>或<code>priv_app</code>域</li>
+</ol>
+</details>
+<h3 id="_4">挑战题</h3>
+<ol start="4">
+<li><strong>多用户数据隔离实现</strong></li>
+</ol>
+<details>
+<summary>Hint: 考虑文件系统和Framework两个层面</summary>
+<p>问题：设计一个方案，确保在多用户环境下，用户A的应用无法访问用户B的应用数据，需要考虑哪些技术措施？</p>
+<p>答案：
+技术措施包括：</p>
+<ol>
+<li>
+<p><strong>文件系统层</strong>：
+   - 使用不同的UID（userId偏移）
+   - 独立的数据目录<code>/data/user/&lt;userId&gt;/</code>
+   - SELinux上下文包含userId
+   - 文件权限700（仅所有者访问）</p>
+</li>
+<li>
+<p><strong>Framework层</strong>：
+   - ContentProvider检查调用者userId
+   - Binder调用验证userId匹配
+   - ActivityManager限制跨用户组件启动
+   - 广播接收器的用户过滤</p>
+</li>
+<li>
+<p><strong>存储加密</strong>：
+   - FBE使用per-user加密密钥
+   - Keystore隔离用户密钥
+   - 凭据独立存储</p>
+</li>
+<li>
+<p><strong>运行时检查</strong>：
+   - PackageManager安装隔离
+   - 权限检查包含userId
+   - 系统服务状态隔离</p>
+</li>
+</ol>
+</details>
+<ol start="5">
+<li><strong>虚拟化安全增强设计</strong></li>
+</ol>
+<details>
+<summary>Hint: 考虑多层防御和性能平衡</summary>
+<p>问题：为一个高安全需求的金融应用设计额外的虚拟化安全措施，如何在不显著影响性能的前提下增强隔离？</p>
+<p>答案：</p>
+<ol>
+<li>
+<p><strong>进程级增强</strong>：
+   - 使用<code>isolated_app</code>域运行敏感操作
+   - 自定义Seccomp-BPF规则，仅允许必需系统调用
+   - 禁用JIT编译，仅使用AOT
+   - 内存页面标记为不可执行</p>
+</li>
+<li>
+<p><strong>存储安全</strong>：
+   - 敏感数据使用StrongBox硬件密钥加密
+   - 实现应用层加密，密钥不落盘
+   - 使用加密数据库（SQLCipher）
+   - 定期密钥轮换</p>
+</li>
+<li>
+<p><strong>网络隔离</strong>：
+   - 证书固定（Certificate Pinning）
+   - 专用VPN通道
+   - eBPF流量监控
+   - 禁止本地网络访问</p>
+</li>
+<li>
+<p><strong>运行时保护</strong>：
+   - RASP（运行时应用自我保护）
+   - 完整性校验（防篡改）
+   - 反调试检测
+   - 行为异常检测</p>
+</li>
+</ol>
+<p>性能优化：</p>
+<ul>
+<li>异步加密操作</li>
+<li>缓存验证结果</li>
+<li>批量处理安全检查</li>
+<li>使用硬件加速</li>
+</ul>
+</details>
+<ol start="6">
+<li><strong>Work Profile架构扩展</strong></li>
+</ol>
+<details>
+<summary>Hint: 考虑跨Profile通信和数据共享场景</summary>
+<p>问题：设计一个安全的跨Profile文件共享机制，允许用户在个人Profile和工作Profile之间选择性地共享文件，需要考虑哪些安全和隐私问题？</p>
+<p>答案：
+设计方案：</p>
+<ol>
+<li>
+<p><strong>架构组件</strong>：
+   - CrossProfileFileProvider：专用的跨Profile内容提供者
+   - ProfileBridge Service：协调跨Profile请求
+   - 策略引擎：DPC配置的共享规则
+   - 审计日志：记录所有跨Profile操作</p>
+</li>
+<li>
+<p><strong>安全措施</strong>：
+   - 文件类型白名单（仅允许特定类型）
+   - 内容扫描（DLP策略）
+   - 水印/标记（标识文件来源）
+   - 访问令牌（临时授权）</p>
+</li>
+<li>
+<p><strong>隐私保护</strong>：
+   - 用户明确授权每次共享
+   - 元数据清理（EXIF等）
+   - 共享历史记录（用户可查）
+   - 自动过期机制</p>
+</li>
+<li>
+<p><strong>实现细节</strong>：
+   - 使用FileProvider生成临时URI
+   - Binder调用包含Profile标识
+   - SELinux规则允许特定跨Profile访问
+   - 文件复制而非引用（避免持续访问）</p>
+</li>
+<li>
+<p><strong>DPC策略控制</strong>：
+   - 允许/禁止特定应用共享
+   - 文件大小限制
+   - 共享频率限制
+   - 强制加密传输</p>
+</li>
+</ol>
+</details>
+<h2 id="gotchas">常见陷阱与错误 (Gotchas)</h2>
+<h3 id="1-uid">1. UID计算错误</h3>
+<p><strong>问题</strong>：直接使用appId作为UID，忽略了多用户偏移
+<strong>后果</strong>：跨用户数据泄露
+<strong>正确做法</strong>：始终使用<code>UserHandle.getUid(userId, appId)</code></p>
+<h3 id="2-selinux">2. SELinux策略遗漏</h3>
+<p><strong>问题</strong>：添加新功能时忘记更新SELinux策略
+<strong>症状</strong>：权限拒绝（avc: denied）
+<strong>调试方法</strong>：<code>adb logcat | grep avc</code>查看拒绝日志</p>
+<h3 id="3-namespace">3. Namespace泄露</h3>
+<p><strong>问题</strong>：在隔离进程中错误地保留了父进程的Namespace
+<strong>后果</strong>：隔离失效
+<strong>检查方法</strong>：<code>/proc/&lt;pid&gt;/ns/</code>目录下的符号链接</p>
+<h3 id="4">4. 跨用户组件启动</h3>
+<p><strong>问题</strong>：尝试直接启动其他用户的Activity/Service
+<strong>症状</strong>：SecurityException
+<strong>正确做法</strong>：使用<code>CrossProfileApps</code> API或系统权限</p>
+<h3 id="5-work-profile">5. Work Profile数据混淆</h3>
+<p><strong>问题</strong>：个人应用访问工作数据或反之
+<strong>原因</strong>：URI授权不当
+<strong>预防</strong>：严格检查<code>UserHandle.getUserId()</code></p>
+<h3 id="6">6. 虚拟化性能退化</h3>
+<p><strong>问题</strong>：过度的安全检查导致性能问题
+<strong>症状</strong>：应用响应缓慢
+<strong>优化</strong>：缓存安全决策、批量处理</p>
+<h2 id="_5">最佳实践检查清单</h2>
+<h3 id="_6">设计阶段</h3>
+<ul>
+<li>[ ] 明确数据隔离边界和安全需求</li>
+<li>[ ] 选择合适的隔离级别（普通应用/隔离进程/独立用户）</li>
+<li>[ ] 设计跨边界通信机制</li>
+<li>[ ] 考虑性能影响和优化方案</li>
+</ul>
+<h3 id="_7">实现阶段</h3>
+<ul>
+<li>[ ] 正确计算和使用UID</li>
+<li>[ ] 实施最小权限原则</li>
+<li>[ ] 添加必要的SELinux策略</li>
+<li>[ ] 使用Framework提供的隔离API</li>
+</ul>
+<h3 id="_8">安全加固</h3>
+<ul>
+<li>[ ] 启用所有可用的安全特性</li>
+<li>[ ] 自定义Seccomp-BPF规则</li>
+<li>[ ] 实施运行时完整性检查</li>
+<li>[ ] 添加审计日志</li>
+</ul>
+<h3 id="_9">测试验证</h3>
+<ul>
+<li>[ ] 多用户场景测试</li>
+<li>[ ] Work Profile兼容性测试</li>
+<li>[ ] 权限和隔离边界测试</li>
+<li>[ ] 性能基准测试</li>
+</ul>
+<h3 id="_10">维护优化</h3>
+<ul>
+<li>[ ] 监控安全日志和异常</li>
+<li>[ ] 定期更新安全策略</li>
+<li>[ ] 跟踪平台安全更新</li>
+<li>[ ] 用户反馈和问题处理</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="chapter25.html" class="nav-link prev">← 第25章：OriginOS深度剖析</a><a href="chapter27.html" class="nav-link next">第27章：实时性与性能优化 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="./">
+    <title>第27章：实时性与性能优化</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/highlight.css">
+    <script src="assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors', 'ams']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors', '[tex]/ams']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="sidebar-search-input" placeholder="搜索..." autocomplete="off">
+            </div>
+            <div id="tree-container">
+                <nav class="tree-nav" role="tree">
+                    <div class="tree-item " >
+                        <a href="index.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter1.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第1章：Android系统架构概览</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter2.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第2章：Linux内核层定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter3.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第3章：硬件抽象层(HAL)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter4.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第4章：Init进程与系统启动</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter5.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第5章：Zygote与应用进程管理</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter6.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第6章：Android Runtime (ART)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter7.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第7章：Binder IPC机制深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter8.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第8章：系统服务架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter9.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第9章：ContentProvider与数据共享</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter10.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第10章：Android图形系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter11.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第11章：音频系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter12.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第12章：相机与多媒体框架</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter13.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第13章：Android安全模型</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter14.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第14章：密钥管理与硬件安全</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter15.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第15章：漏洞案例分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter16.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第16章：Neural Networks API (NNAPI)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter17.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第17章：TensorFlow Lite集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter18.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第18章：ML Kit与设备端AI</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter19.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第19章：NPU/TPU硬件加速</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter20.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第20章：协处理器系统集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter21.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第21章：MIUI系统架构剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter22.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第22章：ColorOS/EMUI技术分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter23.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第23章：厂商内核与驱动定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter24.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第24章：厂商AI能力对比</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter25.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第25章：OriginOS深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter26.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第26章：Android虚拟化技术</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item active" >
+                        <a href="chapter27.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第27章：实时性与性能优化</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter28.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第28章：逆向工程与安全研究</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter29.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第29章：Android未来演进</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter30.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录A：调试工具与技巧</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter31.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录B：源码编译与定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter32.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第32章：参考资源</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="CLAUDE.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">AndroidOS原理教程项目说明</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="README.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="27">第27章：实时性与性能优化</h1>
+<p>Android系统的流畅性直接影响用户体验，本章深入剖析Android的实时性保证机制和性能优化策略。我们将从Linux内核调度器的Android定制开始，探讨如何通过RT调度、Jank检测、内存管理和功耗优化等技术手段，打造一个响应迅速、运行流畅的移动操作系统。通过与iOS、鸿蒙等竞争系统的对比，理解Android在实时性和性能优化方面的独特设计。</p>
+<h2 id="1-rt">1. RT调度器应用</h2>
+<h3 id="11-android">1.1 Android调度器架构概述</h3>
+<p>Android基于Linux内核的调度器，但针对移动设备的特点进行了大量优化。理解这些优化对于开发高性能应用至关重要。</p>
+<h4 id="cfs-completely-fair-scheduler">CFS (Completely Fair Scheduler) 基础</h4>
+<p>Android默认使用CFS调度器，它通过红黑树维护可运行进程队列，使用虚拟运行时间(vruntime)保证公平性。关键概念包括：</p>
+<ul>
+<li><strong>nice值与权重</strong>：nice值范围-20到19，通过<code>prio_to_weight[]</code>数组转换为权重</li>
+<li><strong>时间片计算</strong>：基于<code>sched_latency_ns</code>和进程数量动态计算</li>
+<li><strong>虚拟运行时间</strong>：<code>vruntime = 实际运行时间 * NICE_0_LOAD / 进程权重</code></li>
+<li><strong>唤醒抢占</strong>：通过<code>sysctl_sched_wakeup_granularity</code>控制抢占粒度</li>
+</ul>
+<p>Android对CFS的主要修改：</p>
+<ul>
+<li>调整<code>sched_latency_ns</code>从6ms到10ms，适应移动设备特性</li>
+<li>修改<code>sched_min_granularity_ns</code>提高交互响应</li>
+<li>引入<code>schedtune</code>机制进行能效调优</li>
+</ul>
+<h4 id="rt">RT调度类实现</h4>
+<p>RT调度类为实时任务提供确定性调度保证，Android中主要用于：</p>
+<ul>
+<li>音频处理线程(AudioFlinger)</li>
+<li>触摸事件处理(InputDispatcher)</li>
+<li>显示合成(SurfaceFlinger的关键路径)</li>
+<li>相机预览线程</li>
+</ul>
+<p>RT调度特点：</p>
+<ul>
+<li><strong>优先级范围</strong>：1-99，数值越大优先级越高</li>
+<li><strong>调度策略</strong>：SCHED_FIFO和SCHED_RR</li>
+<li><strong>抢占规则</strong>：高优先级任务总是抢占低优先级</li>
+<li><strong>CPU带宽限制</strong>：通过<code>sched_rt_runtime_us</code>和<code>sched_rt_period_us</code>防止RT任务独占CPU</li>
+</ul>
+<h4 id="eas-energy-aware-scheduling">EAS (Energy Aware Scheduling) 集成</h4>
+<p>Android 5.0开始集成EAS，实现性能与功耗的平衡：</p>
+<ul>
+<li><strong>能效模型</strong>：通过设备树定义CPU能效曲线</li>
+<li><strong>任务放置</strong>：<code>select_energy_cpu_idx()</code>选择最优CPU</li>
+<li><strong>负载追踪</strong>：PELT (Per-Entity Load Tracking)算法</li>
+<li><strong>thermal压力</strong>：温度限制下的性能调整</li>
+</ul>
+<p>关键函数：</p>
+<ul>
+<li><code>find_energy_efficient_cpu()</code>: EAS核心决策函数</li>
+<li><code>compute_energy()</code>: 计算任务在特定CPU上的能耗</li>
+<li><code>schedutil_cpu_freq()</code>: 频率调节接口</li>
+</ul>
+<h4 id="linux">与Linux主线调度器差异</h4>
+<p>Android调度器的主要差异：</p>
+<ol>
+<li><strong>schedtune控制器</strong>：提供per-cgroup的性能提升</li>
+<li><strong>prefer_idle</strong>：优先选择空闲CPU</li>
+<li><strong>uclamp</strong>：细粒度的utilization clamping</li>
+<li><strong>RTG (Related Thread Groups)</strong>：相关线程组优化</li>
+</ol>
+<h3 id="12">1.2 实时线程管理</h3>
+<h4 id="rt_1">RT优先级设计</h4>
+<p>Android系统服务的RT优先级分配遵循严格规范：</p>
+<div class="codehilite"><pre><span></span><code>优先级分配原则：
+99: 仅用于关键中断处理
+95-98: 音频HAL回调线程
+90-94: 触摸事件处理
+85-89: 显示相关线程
+80-84: 相机服务
+1-79: 其他RT需求
+</code></pre></div>
+
+<p>关键API：</p>
+<ul>
+<li><code>setpriority()</code>: 设置nice值</li>
+<li><code>sched_setscheduler()</code>: 设置调度策略和RT优先级</li>
+<li><code>pthread_setschedparam()</code>: POSIX线程接口</li>
+<li><code>android_os_Process_setThreadScheduler()</code>: Android特有接口</li>
+</ul>
+<h4 id="_1">音频线程实时性保证</h4>
+<p>音频是Android中对实时性要求最高的子系统：</p>
+<p><strong>FastMixer线程</strong>：</p>
+<ul>
+<li>RT优先级：通常为95-98</li>
+<li>CPU亲和性：绑定到大核</li>
+<li>缓冲区：仅2-3个period，约5-10ms</li>
+<li>中断处理：ALSA驱动直接唤醒</li>
+</ul>
+<p><strong>音频策略</strong>：</p>
+<ul>
+<li><code>AudioFlinger::MixerThread</code>使用SCHED_FIFO</li>
+<li>HAL回调线程享有最高RT优先级</li>
+<li>通过<code>audio.offload.min.duration.secs</code>控制offload阈值</li>
+</ul>
+<p>优化技巧：</p>
+<ul>
+<li>使用<code>ANDROID_PRIORITY_AUDIO</code>宏</li>
+<li>避免在音频线程中分配内存</li>
+<li>使用lock-free数据结构</li>
+<li>监控<code>audio.flinger.log.latency</code></li>
+</ul>
+<h4 id="_2">渲染线程优先级调优</h4>
+<p>UI渲染流畅性直接影响用户体验：</p>
+<p><strong>RenderThread配置</strong>：</p>
+<ul>
+<li>默认nice值：-10到-4</li>
+<li>动画期间动态提升</li>
+<li>与主线程协同调度</li>
+</ul>
+<p><strong>HWUI渲染管线</strong>：</p>
+<ol>
+<li>UI线程：构建DisplayList</li>
+<li>RenderThread：OpenGL命令生成</li>
+<li>GPU：异步渲染</li>
+<li>SurfaceFlinger：合成显示</li>
+</ol>
+<p>优化要点：</p>
+<ul>
+<li><code>debug.hwui.render_thread_priority</code>调整优先级</li>
+<li>监控<code>gfx.view.stats</code>了解渲染性能</li>
+<li>使用<code>dumpsys gfxinfo</code>分析帧时间</li>
+</ul>
+<h4 id="_3">触摸响应优化</h4>
+<p>触摸延迟是用户最敏感的性能指标：</p>
+<p><strong>InputDispatcher优化</strong>：</p>
+<ul>
+<li>RT优先级90+</li>
+<li>CPU boost触发</li>
+<li>预测性触摸处理</li>
+</ul>
+<p><strong>延迟优化技术</strong>：</p>
+<ol>
+<li><strong>硬件层</strong>：高采样率触摸屏(120Hz+)</li>
+<li><strong>驱动层</strong>：中断亲和性绑定</li>
+<li><strong>框架层</strong>：批处理与预测</li>
+<li><strong>应用层</strong>：异步触摸处理</li>
+</ol>
+<p>关键指标：</p>
+<ul>
+<li>Motion-to-photon延迟目标：&lt;20ms</li>
+<li>触摸采样率：120-240Hz</li>
+<li>预测算法：Kalman滤波器</li>
+</ul>
+<h3 id="13-cpu">1.3 CPU亲和性与大小核调度</h3>
+<h4 id="biglittle">big.LITTLE架构支持</h4>
+<p>Android深度优化了ARM big.LITTLE架构支持：</p>
+<p><strong>集群类型</strong>：</p>
+<ul>
+<li><strong>传统big.LITTLE</strong>：2+4或4+4配置</li>
+<li><strong>DynamIQ</strong>：灵活的1+3+4等配置</li>
+<li><strong>三集群</strong>：超大核+大核+小核</li>
+</ul>
+<p><strong>调度域构建</strong>：</p>
+<div class="codehilite"><pre><span></span><code>MC domain: 同集群内CPU
+DIE domain: 跨集群调度
+NUMA domain: 多芯片系统
+</code></pre></div>
+
+<p><strong>能效感知</strong>：</p>
+<ul>
+<li><code>capacity</code>：CPU算力标定</li>
+<li><code>capacity_orig</code>：最大算力</li>
+<li><code>capacity_curr</code>：当前算力(考虑频率和温度)</li>
+</ul>
+<h4 id="_4">任务迁移策略</h4>
+<p>任务在大小核间迁移的决策机制：</p>
+<p><strong>迁移触发条件</strong>：</p>
+<ol>
+<li><strong>负载不均衡</strong>：<code>load_balance()</code>周期性检查</li>
+<li><strong>唤醒时</strong>：<code>select_task_rq()</code>选择目标CPU</li>
+<li><strong>能效优化</strong>：EAS主动迁移</li>
+<li><strong>温度限制</strong>：thermal governor介入</li>
+</ol>
+<p><strong>迁移成本考虑</strong>：</p>
+<ul>
+<li>Cache亲和性损失</li>
+<li>跨集群通信开销</li>
+<li>功耗状态切换延迟</li>
+</ul>
+<p><strong>HMP (Heterogeneous Multi-Processing) 策略</strong>：</p>
+<ul>
+<li><code>sched_upmigrate</code>：任务迁移到大核阈值</li>
+<li><code>sched_downmigrate</code>：任务迁移到小核阈值</li>
+<li><code>sched_small_task</code>：小任务判定标准</li>
+</ul>
+<h4 id="_5">热插拔机制</h4>
+<p>CPU热插拔用于极限省电场景：</p>
+<p><strong>核心组件</strong>：</p>
+<ul>
+<li><code>cpu_subsys</code>：sysfs接口</li>
+<li><code>cpuhp_state_machine</code>：状态机管理</li>
+<li><code>cpufreq_governor</code>：与调频协同</li>
+</ul>
+<p><strong>Android定制</strong>：</p>
+<ol>
+<li><strong>msm_performance</strong>：高通平台优化</li>
+<li><strong>core_ctl</strong>：智能核心控制</li>
+<li><strong>isolation</strong>：CPU隔离机制</li>
+</ol>
+<p><strong>优化建议</strong>：</p>
+<ul>
+<li>避免频繁热插拔</li>
+<li>考虑唤醒延迟</li>
+<li>监控<code>trace_cpu_hotplug</code></li>
+</ul>
+<h4 id="dynamiq">DynamIQ集群管理</h4>
+<p>ARM DynamIQ带来更灵活的CPU配置：</p>
+<p><strong>关键特性</strong>：</p>
+<ul>
+<li>单集群内异构CPU</li>
+<li>共享L3 cache</li>
+<li>精细功耗控制</li>
+</ul>
+<p><strong>调度适配</strong>：</p>
+<ul>
+<li><code>phantom domains</code>：虚拟调度域</li>
+<li><code>capacity_margin</code>：预留算力</li>
+<li><code>misfit task</code>：任务不匹配检测</li>
+</ul>
+<p><strong>性能优化</strong>：</p>
+<ul>
+<li>Cache分区(CAP)</li>
+<li>内存延迟优化</li>
+<li>中断亲和性调优</li>
+</ul>
+<h2 id="2-jank">2. Jank检测与优化</h2>
+<h3 id="21-jank">2.1 Jank产生机制分析</h3>
+<p>Jank（卡顿）是指UI渲染无法跟上显示刷新率，导致的视觉不连续现象。理解Jank产生的根本原因是优化的第一步。</p>
+<h4 id="_6">帧渲染管线</h4>
+<p>Android的图形渲染采用生产者-消费者模型，涉及多个阶段：</p>
+<p><strong>渲染管线阶段</strong>：</p>
+<ol>
+<li><strong>Input</strong>：触摸事件产生和分发</li>
+<li><strong>Animation</strong>：动画计算和属性更新</li>
+<li><strong>Measure/Layout</strong>：视图树测量和布局</li>
+<li><strong>Draw</strong>：构建DisplayList</li>
+<li><strong>Sync</strong>：同步RenderThread</li>
+<li><strong>Render</strong>：GPU命令生成</li>
+<li><strong>Swap</strong>：缓冲区交换</li>
+<li><strong>Composite</strong>：SurfaceFlinger合成</li>
+</ol>
+<p><strong>关键时间节点</strong>：</p>
+<ul>
+<li><code>Vsync</code>：垂直同步信号，60Hz屏幕每16.67ms一次</li>
+<li><code>Input Latency</code>：触摸到响应延迟</li>
+<li><code>Frame Deadline</code>：帧必须完成的最后期限</li>
+<li><code>Present Time</code>：帧实际显示时间</li>
+</ul>
+<p><strong>性能监控点</strong>：</p>
+<ul>
+<li><code>getFrameStats()</code>: 获取帧统计信息</li>
+<li><code>FrameMetrics API</code>: 详细的帧时间分解</li>
+<li><code>dumpsys gfxinfo</code>: 系统级图形信息</li>
+</ul>
+<h4 id="vsync">VSYNC机制</h4>
+<p>VSYNC是Android图形系统的心跳，协调整个渲染流程：</p>
+<p><strong>VSYNC分发机制</strong>：</p>
+<div class="codehilite"><pre><span></span><code>HW Composer → SurfaceFlinger → Choreographer → App
+</code></pre></div>
+
+<p><strong>三种VSYNC</strong>：</p>
+<ol>
+<li><strong>HW VSYNC</strong>：硬件产生的真实信号</li>
+<li><strong>SW VSYNC</strong>：软件模拟的VSYNC</li>
+<li><strong>App VSYNC</strong>：应用接收的VSYNC，有phase offset</li>
+</ol>
+<p><strong>Phase offset优化</strong>：</p>
+<ul>
+<li><code>VSYNC_EVENT_PHASE_OFFSET_NS</code>：SurfaceFlinger偏移</li>
+<li><code>SF_VSYNC_EVENT_PHASE_OFFSET_NS</code>：应用偏移</li>
+<li>目的：给渲染更多时间，减少延迟</li>
+</ul>
+<p><strong>DispSync模型</strong>：</p>
+<ul>
+<li>预测下一个VSYNC时间</li>
+<li>处理VSYNC漂移</li>
+<li>支持可变刷新率(VRR)</li>
+</ul>
+<h4 id="triple-buffering">Triple Buffering</h4>
+<p>Android使用多缓冲技术平衡性能和延迟：</p>
+<p><strong>缓冲区角色</strong>：</p>
+<ol>
+<li><strong>Front Buffer</strong>：正在显示的缓冲区</li>
+<li><strong>Back Buffer</strong>：正在渲染的缓冲区</li>
+<li><strong>Third Buffer</strong>：备用缓冲区，处理掉帧</li>
+</ol>
+<p><strong>BufferQueue机制</strong>：</p>
+<ul>
+<li><code>dequeueBuffer()</code>: 获取可用缓冲区</li>
+<li><code>queueBuffer()</code>: 提交渲染完成的缓冲区</li>
+<li><code>acquireBuffer()</code>: SurfaceFlinger获取待合成缓冲区</li>
+</ul>
+<p><strong>优化策略</strong>：</p>
+<ul>
+<li>动态调整缓冲区数量</li>
+<li>根据渲染压力切换双缓冲/三缓冲</li>
+<li>监控<code>buffer starvation</code></li>
+</ul>
+<h4 id="_7">掉帧原因分类</h4>
+<p>深入理解各种掉帧原因有助于针对性优化：</p>
+<p><strong>1. CPU限制</strong>：
+- 主线程阻塞（网络、磁盘IO）
+- 布局层级过深
+- 过度绘制
+- 频繁GC</p>
+<p><strong>2. GPU限制</strong>：
+- 复杂shader
+- 大纹理上传
+- 过多绘制调用
+- GPU内存带宽饱和</p>
+<p><strong>3. 系统资源竞争</strong>：
+- 后台任务抢占CPU
+- 内存压力触发回收
+- 温度限制降频
+- 其他应用干扰</p>
+<p><strong>4. 框架问题</strong>：
+- Choreographer调度延迟
+- SurfaceFlinger合成瓶颈
+- Binder通信阻塞
+- 锁竞争</p>
+<h3 id="22-systraceperfetto">2.2 Systrace与Perfetto工具链</h3>
+<p>性能分析工具是Jank优化的利器，Android提供了强大的工具链。</p>
+<h4 id="atrace">Atrace架构</h4>
+<p>Atrace是Android的系统级跟踪框架：</p>
+<p><strong>核心组件</strong>：</p>
+<ul>
+<li><code>kernel/trace/trace.c</code>：内核跟踪基础设施</li>
+<li><code>libcutils/trace.c</code>：用户空间跟踪API</li>
+<li><code>atrace</code>命令：数据收集工具</li>
+</ul>
+<p><strong>跟踪类别</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">gfx</span><span class="o">:</span><span class="w"> </span><span class="err">图形系统</span>
+<span class="n">input</span><span class="o">:</span><span class="w"> </span><span class="err">输入系统</span>
+<span class="n">view</span><span class="o">:</span><span class="w"> </span><span class="n">View系统</span>
+<span class="n">wm</span><span class="o">:</span><span class="w"> </span><span class="err">窗口管理器</span>
+<span class="n">am</span><span class="o">:</span><span class="w"> </span><span class="err">活动管理器</span>
+<span class="n">sm</span><span class="o">:</span><span class="w"> </span><span class="err">同步管理器</span>
+<span class="n">audio</span><span class="o">:</span><span class="w"> </span><span class="err">音频系统</span>
+<span class="n">video</span><span class="o">:</span><span class="w"> </span><span class="err">视频系统</span>
+<span class="n">camera</span><span class="o">:</span><span class="w"> </span><span class="err">相机系统</span>
+</code></pre></div>
+
+<p><strong>使用方式</strong>：</p>
+<ul>
+<li><code>ATRACE_CALL()</code>: 函数级跟踪</li>
+<li><code>ATRACE_BEGIN/END()</code>: 代码块跟踪</li>
+<li><code>ATRACE_ASYNC_BEGIN/END()</code>: 异步事件跟踪</li>
+<li><code>ATRACE_INT()</code>: 计数器跟踪</li>
+</ul>
+<h4 id="perfetto">Perfetto数据收集</h4>
+<p>Perfetto是新一代跟踪系统，提供更强大的功能：</p>
+<p><strong>架构优势</strong>：</p>
+<ul>
+<li>统一的数据模型(protobuf)</li>
+<li>低开销的进程内跟踪</li>
+<li>灵活的触发机制</li>
+<li>长时间跟踪支持</li>
+</ul>
+<p><strong>核心组件</strong>：</p>
+<ol>
+<li><strong>traced</strong>：系统守护进程</li>
+<li><strong>traced_probes</strong>：数据源服务</li>
+<li><strong>perfetto SDK</strong>：应用集成库</li>
+<li><strong>trace processor</strong>：数据分析引擎</li>
+</ol>
+<p><strong>数据源类型</strong>：</p>
+<ul>
+<li><code>linux.ftrace</code>: 内核事件</li>
+<li><code>android.packages_list</code>: 包信息</li>
+<li><code>android.process_stats</code>: 进程统计</li>
+<li><code>android.gpu.memory</code>: GPU内存</li>
+<li><code>track_event</code>: 自定义事件</li>
+</ul>
+<p><strong>配置示例</strong>：</p>
+<div class="codehilite"><pre><span></span><code>TraceConfig {
+  duration_ms: 10000
+  buffers {
+    size_kb: 65536
+  }
+  data_sources {
+    config {
+      name: &quot;linux.ftrace&quot;
+      ftrace_config {
+        ftrace_events: &quot;sched/*&quot;
+        ftrace_events: &quot;power/*&quot;
+      }
+    }
+  }
+}
+</code></pre></div>
+
+<h4 id="_8">性能指标分析</h4>
+<p>关键性能指标帮助量化Jank程度：</p>
+<p><strong>帧时间指标</strong>：</p>
+<ul>
+<li><strong>Frame Duration</strong>：总帧时间</li>
+<li><strong>Janky Frames</strong>：超过阈值的帧</li>
+<li><strong>99th Percentile</strong>：最差1%的帧时间</li>
+<li><strong>Frame Uniformity</strong>：帧时间方差</li>
+</ul>
+<p><strong>计算公式</strong>：</p>
+<div class="codehilite"><pre><span></span><code>Jank率 = Janky帧数 / 总帧数
+帧时间预算 = 1000ms / 刷新率
+超时帧 = 实际帧时间 &gt; 帧时间预算
+</code></pre></div>
+
+<p><strong>分析维度</strong>：</p>
+<ol>
+<li><strong>时间分解</strong>：各阶段耗时</li>
+<li><strong>线程分析</strong>：CPU利用率和等待</li>
+<li><strong>系统负载</strong>：CPU/GPU/内存使用率</li>
+<li><strong>热点识别</strong>：最耗时的函数</li>
+</ol>
+<h4 id="jank">自动化Jank检测</h4>
+<p>自动化检测帮助持续监控性能：</p>
+<p><strong>JankStats库</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">JankStats</span><span class="p">.</span><span class="na">createAndTrack</span><span class="p">(</span>
+<span class="w">    </span><span class="n">window</span><span class="p">,</span>
+<span class="w">    </span><span class="n">frameListener</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">frameData</span><span class="w"> </span><span class="o">-&gt;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">frameData</span><span class="p">.</span><span class="na">isJank</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">// 记录Jank信息</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><strong>FrameMetricsAggregator</strong>：</p>
+<ul>
+<li>收集详细帧指标</li>
+<li>支持直方图分析</li>
+<li>可导出到APM系统</li>
+</ul>
+<p><strong>CI/CD集成</strong>：</p>
+<ul>
+<li>Monkey测试 + Systrace</li>
+<li>自动化性能回归检测</li>
+<li>基准测试(Macrobenchmark)</li>
+</ul>
+<h3 id="23-choreographer">2.3 Choreographer优化</h3>
+<p>Choreographer是Android动画和UI更新的中枢，优化它对改善Jank至关重要。</p>
+<h4 id="_9">帧调度机制</h4>
+<p>Choreographer负责协调所有UI更新：</p>
+<p><strong>回调类型</strong>：</p>
+<ol>
+<li><strong>INPUT</strong>：输入事件处理</li>
+<li><strong>ANIMATION</strong>：动画更新</li>
+<li><strong>INSETS_ANIMATION</strong>：窗口动画</li>
+<li><strong>TRAVERSAL</strong>：布局和绘制</li>
+<li><strong>COMMIT</strong>：提交帧</li>
+</ol>
+<p><strong>调度流程</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">scheduleVsyncLocked</span><span class="p">()</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">请求VSYNC</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">onVsync</span><span class="p">()</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">接收VSYNC信号</span><span class="w">  </span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">doFrame</span><span class="p">()</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">执行帧回调</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">doCallbacks</span><span class="p">()</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">按类型执行回调</span>
+</code></pre></div>
+
+<p><strong>优化要点</strong>：</p>
+<ul>
+<li>避免在UI线程执行耗时操作</li>
+<li>使用<code>postFrameCallback()</code>而非<code>post()</code></li>
+<li>监控<code>skippedFrames</code>识别卡顿</li>
+</ul>
+<h4 id="input-latency">Input latency优化</h4>
+<p>减少输入延迟提升交互体验：</p>
+<p><strong>延迟组成</strong>：</p>
+<ol>
+<li><strong>硬件延迟</strong>：触摸屏扫描</li>
+<li><strong>驱动延迟</strong>：中断处理</li>
+<li><strong>系统延迟</strong>：事件分发</li>
+<li><strong>应用延迟</strong>：事件处理</li>
+<li><strong>渲染延迟</strong>：UI更新</li>
+</ol>
+<p><strong>优化技术</strong>：</p>
+<ul>
+<li><strong>输入预测</strong>：基于历史数据预测</li>
+<li><strong>批处理优化</strong>：合并相近事件</li>
+<li><strong>优先级提升</strong>：输入线程RT调度</li>
+<li><strong>早期唤醒</strong>：提前唤醒渲染线程</li>
+</ul>
+<p><strong>测量方法</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">window</span><span class="p">.</span><span class="na">addOnFrameMetricsAvailableListener</span><span class="p">(</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="n">window</span><span class="p">,</span><span class="w"> </span><span class="n">frameMetrics</span><span class="p">,</span><span class="w"> </span><span class="n">dropCount</span><span class="w"> </span><span class="o">-&gt;</span>
+<span class="w">        </span><span class="n">val</span><span class="w"> </span><span class="n">inputDelay</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">frameMetrics</span><span class="p">.</span><span class="na">getMetric</span><span class="p">(</span>
+<span class="w">            </span><span class="n">FrameMetrics</span><span class="p">.</span><span class="na">INPUT_HANDLING_DURATION</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<h4 id="_10">动画性能调优</h4>
+<p>流畅动画是良好用户体验的关键：</p>
+<p><strong>动画类型优化</strong>：</p>
+<ol>
+<li><strong>属性动画</strong>：使用<code>RenderNodeAnimator</code></li>
+<li><strong>过渡动画</strong>：缓存场景状态</li>
+<li><strong>物理动画</strong>：使用<code>SpringAnimation</code></li>
+<li><strong>Lottie动画</strong>：硬件加速渲染</li>
+</ol>
+<p><strong>优化技巧</strong>：</p>
+<ul>
+<li>使用<code>ValueAnimator.setFrameDelay()</code>调整帧率</li>
+<li>避免在动画回调中创建对象</li>
+<li>使用<code>ViewPropertyAnimator</code>批量更新</li>
+<li>开启硬件加速<code>setLayerType(LAYER_TYPE_HARDWARE)</code></li>
+</ul>
+<p><strong>动画监控</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">animator</span><span class="p">.</span><span class="na">addUpdateListener</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">animation</span><span class="w"> </span><span class="o">-&gt;</span>
+<span class="w">    </span><span class="c1">// 避免复杂计算</span>
+<span class="w">    </span><span class="n">view</span><span class="p">.</span><span class="na">translationX</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">animation</span><span class="p">.</span><span class="na">animatedValue</span><span class="w"> </span><span class="n">as</span><span class="w"> </span><span class="n">Float</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h4 id="renderthread">RenderThread优化</h4>
+<p>RenderThread负责GPU命令生成：</p>
+<p><strong>线程特性</strong>：</p>
+<ul>
+<li>独立于UI线程</li>
+<li>拥有独立的GL context</li>
+<li>支持异步渲染</li>
+</ul>
+<p><strong>优化策略</strong>：</p>
+<ol>
+<li>
+<p><strong>减少绘制复杂度</strong>：
+   - 简化自定义View
+   - 使用<code>Canvas.quickReject()</code>
+   - 避免<code>saveLayer()</code></p>
+</li>
+<li>
+<p><strong>纹理优化</strong>：
+   - 使用纹理图集
+   - 及时释放纹理
+   - 控制纹理大小</p>
+</li>
+<li>
+<p><strong>命令优化</strong>：
+   - 批量绘制调用
+   - 状态变化最小化
+   - 使用Display List</p>
+</li>
+</ol>
+<p><strong>调试工具</strong>：</p>
+<ul>
+<li><code>debug.hwui.profile</code>: 显示渲染信息</li>
+<li><code>debug.hwui.overdraw</code>: 过度绘制检测</li>
+<li><code>dumpsys gfxinfo</code>: 详细渲染统计</li>
+</ul>
+<h2 id="3">3. 内存压力处理</h2>
+<h3 id="31">3.1 低内存管理器演进</h3>
+<p>Android的低内存管理经历了从内核空间到用户空间的重要演进，这种变化带来了更灵活和智能的内存管理策略。</p>
+<h4 id="lmklmkd">LMK到LMKD迁移</h4>
+<p><strong>LMK (Low Memory Killer) 时代</strong>：</p>
+<p>传统的LMK是内核模块，存在以下问题：</p>
+<ul>
+<li>决策逻辑固定在内核中</li>
+<li>难以适配不同设备</li>
+<li>缺乏灵活的策略调整</li>
+<li>无法利用用户空间信息</li>
+</ul>
+<p><strong>LMKD (Low Memory Killer Daemon) 优势</strong>：</p>
+<p>LMKD作为用户空间守护进程，提供了：</p>
+<ul>
+<li>更灵活的杀进程策略</li>
+<li>可配置的内存阈值</li>
+<li>与ActivityManager深度集成</li>
+<li>支持多种压力信号源</li>
+</ul>
+<p><strong>架构对比</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">LMK</span><span class="o">:</span><span class="w"> </span><span class="n">Kernel</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="err">直接杀进程</span>
+<span class="n">LMKD</span><span class="o">:</span><span class="w"> </span><span class="n">Kernel</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">PSI</span><span class="o">/</span><span class="n">vmpressure</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">LMKD</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">ActivityManager</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="err">杀进程</span>
+</code></pre></div>
+
+<p><strong>LMKD工作流程</strong>：</p>
+<ol>
+<li>监听内存压力事件</li>
+<li>计算当前内存状态</li>
+<li>选择牺牲进程</li>
+<li>通过socket通知kill</li>
+<li>更新系统状态</li>
+</ol>
+<h4 id="psi-pressure-stall-information">PSI (Pressure Stall Information) 集成</h4>
+<p>PSI是Linux 4.20引入的压力监控机制，Android充分利用了这一特性：</p>
+<p><strong>PSI指标类型</strong>：</p>
+<ul>
+<li><strong>some</strong>: 至少一个任务阻塞</li>
+<li><strong>full</strong>: 所有任务阻塞</li>
+<li><strong>avg10/60/300</strong>: 不同时间窗口平均值</li>
+</ul>
+<p><strong>内存压力监控</strong>：</p>
+<div class="codehilite"><pre><span></span><code>/proc/pressure/memory
+some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+</code></pre></div>
+
+<p><strong>LMKD中的PSI使用</strong>：</p>
+<ul>
+<li><code>init_psi_monitors()</code>: 初始化PSI监控</li>
+<li><code>mp_event_psi()</code>: 处理PSI事件</li>
+<li>阈值配置：<code>ro.lmk.psi_partial_stall_ms</code></li>
+<li>采样窗口：<code>ro.lmk.psi_complete_stall_ms</code></li>
+</ul>
+<p><strong>与vmpressure对比</strong>：</p>
+<ul>
+<li>PSI更准确反映实际压力</li>
+<li>支持更细粒度的监控</li>
+<li>降低误杀率</li>
+<li>更好的多核扩展性</li>
+</ul>
+<h4 id="_11">内存水位线调整</h4>
+<p>Android定义了多级内存水位线来触发不同的回收行为：</p>
+<p><strong>水位线级别</strong>：</p>
+<div class="codehilite"><pre><span></span><code>Critical (致命) &lt; Low (低) &lt; Pressure (压力) &lt; Medium (中等) &lt; High (高)
+</code></pre></div>
+
+<p><strong>计算方式</strong>：</p>
+<ul>
+<li>基于<code>MemTotal</code>和<code>SwapTotal</code></li>
+<li>考虑zram压缩比</li>
+<li>动态调整阈值</li>
+</ul>
+<p><strong>关键属性</strong>：</p>
+<ul>
+<li><code>ro.lmk.critical</code>: 致命阈值(MB)</li>
+<li><code>ro.lmk.low</code>: 低内存阈值</li>
+<li><code>ro.lmk.medium</code>: 中等阈值</li>
+<li><code>ro.lmk.critical_upgrade</code>: 是否允许升级</li>
+</ul>
+<p><strong>自适应调整</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">minfree</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">property_get_int32</span><span class="p">(</span><span class="s">&quot;ro.lmk.low&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">1024</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">mem_total</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2048</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">minfree</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">minfree</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mem_total</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2048</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h4 id="oom_adj">进程优先级oom_adj</h4>
+<p>oom_adj是决定进程生死的关键指标：</p>
+<p><strong>adj值范围与含义</strong>：</p>
+<div class="codehilite"><pre><span></span><code>-1000: 不可杀死(系统关键进程)
+-900: 持久进程(persistent)
+-800: 系统进程
+-700: 持久服务
+0: 前台应用
+100: 可见应用
+200: 可感知应用
+300: 备份应用
+400-500: 服务进程
+600-700: Home应用
+800-900: 缓存进程
+900+: 空进程
+</code></pre></div>
+
+<p><strong>计算因素</strong>：</p>
+<ol>
+<li><strong>进程状态</strong>：前台/后台/服务</li>
+<li><strong>组件状态</strong>：Activity/Service/Provider</li>
+<li><strong>客户端重要性</strong>：绑定服务的客户端</li>
+<li><strong>用户交互</strong>：最近使用时间</li>
+</ol>
+<p><strong>优化策略</strong>：</p>
+<ul>
+<li>合理使用前台服务</li>
+<li>及时释放不需要的组件</li>
+<li>避免内存泄漏提高存活率</li>
+<li>使用JobScheduler延迟任务</li>
+</ul>
+<h3 id="32">3.2 内存回收策略</h3>
+<p>内存回收是维持系统流畅的关键机制，Android在Linux基础上进行了大量优化。</p>
+<h4 id="kswapd">kswapd工作机制</h4>
+<p>kswapd是内核的内存回收线程，负责异步页面回收：</p>
+<p><strong>触发条件</strong>：</p>
+<ul>
+<li>空闲页面低于<code>low</code>水位线</li>
+<li>分配失败唤醒</li>
+<li>定期唤醒检查</li>
+</ul>
+<p><strong>回收流程</strong>：</p>
+<ol>
+<li><code>balance_pgdat()</code>: 主循环</li>
+<li><code>shrink_zone()</code>: 回收特定zone</li>
+<li><code>shrink_lruvec()</code>: LRU链表回收</li>
+<li><code>shrink_slab()</code>: slab缓存回收</li>
+</ol>
+<p><strong>Android优化</strong>：</p>
+<ul>
+<li>提高kswapd优先级</li>
+<li>调整<code>swappiness</code>参数</li>
+<li>优化<code>min_free_kbytes</code></li>
+<li>绑定CPU亲和性</li>
+</ul>
+<p><strong>监控指标</strong>：</p>
+<div class="codehilite"><pre><span></span><code>cat<span class="w"> </span>/proc/vmstat<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s2">&quot;pgsteal|pgscan|pgfree&quot;</span>
+</code></pre></div>
+
+<h4 id="direct-reclaim">Direct reclaim优化</h4>
+<p>Direct reclaim是同步回收路径，直接影响应用性能：</p>
+<p><strong>问题分析</strong>：</p>
+<ul>
+<li>阻塞内存分配</li>
+<li>增加延迟</li>
+<li>可能导致ANR</li>
+</ul>
+<p><strong>优化措施</strong>：</p>
+<ol>
+<li>
+<p><strong>减少触发</strong>：
+   - 预留更多内存
+   - 提前异步回收
+   - 使用内存池</p>
+</li>
+<li>
+<p><strong>缩短时间</strong>：
+   - 限制回收页面数
+   - 优先回收易释放页面
+   - 避免回收代码页</p>
+</li>
+<li>
+<p><strong>进程隔离</strong>：
+   - 关键进程使用<code>mlockall()</code>
+   - 内存cgroup隔离
+   - 专用内存预留</p>
+</li>
+</ol>
+<p><strong>内核参数调优</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="m">0</span><span class="w"> </span>&gt;<span class="w"> </span>/proc/sys/vm/direct_reclaim_anon
+<span class="nb">echo</span><span class="w"> </span><span class="m">200</span><span class="w"> </span>&gt;<span class="w"> </span>/proc/sys/vm/direct_reclaim_swappiness
+</code></pre></div>
+
+<h4 id="zram">ZRAM压缩</h4>
+<p>ZRAM提供内存压缩功能，有效扩展可用内存：</p>
+<p><strong>工作原理</strong>：</p>
+<ul>
+<li>创建基于RAM的块设备</li>
+<li>压缩换出页面</li>
+<li>透明解压访问</li>
+</ul>
+<p><strong>配置优化</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 设置ZRAM大小</span>
+<span class="nb">echo</span><span class="w"> </span>2G<span class="w"> </span>&gt;<span class="w"> </span>/sys/block/zram0/disksize
+<span class="c1"># 选择压缩算法</span>
+<span class="nb">echo</span><span class="w"> </span>lz4<span class="w"> </span>&gt;<span class="w"> </span>/sys/block/zram0/comp_algorithm
+<span class="c1"># 启用ZRAM</span>
+mkswap<span class="w"> </span>/dev/block/zram0
+swapon<span class="w"> </span>/dev/block/zram0
+</code></pre></div>
+
+<p><strong>压缩算法对比</strong>：</p>
+<ul>
+<li><strong>lz4</strong>: 最快，压缩比适中</li>
+<li><strong>lzo</strong>: 平衡选择</li>
+<li><strong>zstd</strong>: 压缩比最高，CPU开销大</li>
+</ul>
+<p><strong>性能监控</strong>：</p>
+<div class="codehilite"><pre><span></span><code>cat<span class="w"> </span>/sys/block/zram0/mm_stat
+<span class="c1"># 输出：原始大小 压缩大小 内存使用 ...</span>
+</code></pre></div>
+
+<h4 id="ion">ION内存池管理</h4>
+<p>ION是Android的统一内存分配器，管理各种内存池：</p>
+<p><strong>内存池类型</strong>：</p>
+<ol>
+<li><strong>SYSTEM</strong>: 普通内存</li>
+<li><strong>SYSTEM_CONTIG</strong>: 连续内存</li>
+<li><strong>CARVEOUT</strong>: 预留内存</li>
+<li><strong>CMA</strong>: 连续内存分配器</li>
+<li><strong>DMA</strong>: DMA缓冲区</li>
+</ol>
+<p><strong>分配策略</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">ion_alloc</span><span class="p">(</span><span class="n">len</span><span class="p">,</span><span class="w"> </span><span class="n">heap_mask</span><span class="p">,</span><span class="w"> </span><span class="n">flags</span><span class="p">)</span>
+<span class="err">→</span><span class="w"> </span><span class="n">选择合适heap</span>
+<span class="err">→</span><span class="w"> </span><span class="n">分配内存</span>
+<span class="err">→</span><span class="w"> </span><span class="n">创建ion_buffer</span>
+<span class="err">→</span><span class="w"> </span><span class="n">返回fd</span>
+</code></pre></div>
+
+<p><strong>内存共享机制</strong>：</p>
+<ul>
+<li>基于fd的共享</li>
+<li>支持跨进程映射</li>
+<li>引用计数管理</li>
+<li>Cache一致性维护</li>
+</ul>
+<p><strong>优化建议</strong>：</p>
+<ul>
+<li>合理选择heap类型</li>
+<li>及时释放不用的buffer</li>
+<li>使用cache维护API</li>
+<li>监控碎片化情况</li>
+</ul>
+<h3 id="33">3.3 应用内存优化</h3>
+<p>应用层的内存优化对系统整体性能至关重要。</p>
+<h4 id="_12">内存泄漏检测</h4>
+<p>内存泄漏是导致应用性能下降和被杀的主要原因：</p>
+<p><strong>常见泄漏类型</strong>：</p>
+<ol>
+<li><strong>Context泄漏</strong>：静态引用Activity</li>
+<li><strong>Handler泄漏</strong>：内部类持有外部引用</li>
+<li><strong>监听器泄漏</strong>：未注销的监听器</li>
+<li><strong>集合泄漏</strong>：静态集合持有对象</li>
+<li><strong>线程泄漏</strong>：未结束的线程</li>
+</ol>
+<p><strong>检测工具</strong>：</p>
+<ul>
+<li><strong>LeakCanary</strong>: 自动检测泄漏</li>
+<li><strong>Android Studio Profiler</strong>: 实时内存分析</li>
+<li><strong>MAT (Memory Analyzer Tool)</strong>: 深度分析</li>
+<li><strong>systrace</strong>: 系统级内存追踪</li>
+</ul>
+<p><strong>LeakCanary原理</strong>：</p>
+<ol>
+<li>监控对象生命周期</li>
+<li>主动触发GC</li>
+<li>检查引用链</li>
+<li>生成泄漏报告</li>
+</ol>
+<p><strong>防止泄漏的最佳实践</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 使用弱引用</span>
+<span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">class</span> <span class="nc">MyHandler</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Handler</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">WeakReference</span><span class="o">&lt;</span><span class="n">Activity</span><span class="o">&gt;</span><span class="w"> </span><span class="n">mActivity</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// 及时清理</span>
+<span class="nd">@Override</span>
+<span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onDestroy</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">handler</span><span class="p">.</span><span class="na">removeCallbacksAndMessages</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span>
+<span class="w">    </span><span class="n">unregisterReceiver</span><span class="p">(</span><span class="n">receiver</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h4 id="bitmap">Bitmap内存管理</h4>
+<p>Bitmap是Android应用最大的内存消耗源：</p>
+<p><strong>内存计算</strong>：</p>
+<div class="codehilite"><pre><span></span><code>内存大小 = 宽度 × 高度 × 每像素字节数
+ARGB_8888: 4字节/像素
+RGB_565: 2字节/像素
+</code></pre></div>
+
+<p><strong>优化策略</strong>：</p>
+<ol>
+<li><strong>合适的解码配置</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">options</span><span class="p">.</span><span class="na">inSampleSize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"> </span><span class="c1">// 缩放</span>
+<span class="n">options</span><span class="p">.</span><span class="na">inPreferredConfig</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Bitmap</span><span class="p">.</span><span class="na">Config</span><span class="p">.</span><span class="na">RGB_565</span><span class="p">;</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>复用Bitmap</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">options</span><span class="p">.</span><span class="na">inBitmap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reusableBitmap</span><span class="p">;</span>
+<span class="n">options</span><span class="p">.</span><span class="na">inMutable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>及时回收</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">bitmap</span><span class="p">.</span><span class="na">recycle</span><span class="p">();</span>
+<span class="n">bitmap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+</code></pre></div>
+
+<p><strong>高级优化</strong>：</p>
+<ul>
+<li>使用<code>BitmapRegionDecoder</code>加载大图</li>
+<li>实现图片缓存(LRU)</li>
+<li>使用WebP格式</li>
+<li>Hardware Bitmap(Android O+)</li>
+</ul>
+<h4 id="native">Native内存追踪</h4>
+<p>Native内存不受Java堆限制，需要特别关注：</p>
+<p><strong>追踪工具</strong>：</p>
+<ul>
+<li><strong>malloc_debug</strong>: 内存分配追踪</li>
+<li><strong>memtrack</strong>: HAL层内存统计  </li>
+<li><strong>perfetto</strong>: 全面的内存追踪</li>
+<li><strong>AddressSanitizer</strong>: 内存错误检测</li>
+</ul>
+<p><strong>malloc_debug使用</strong>：</p>
+<div class="codehilite"><pre><span></span><code>adb<span class="w"> </span>shell<span class="w"> </span>setprop<span class="w"> </span>libc.debug.malloc.program<span class="w"> </span>app_process
+adb<span class="w"> </span>shell<span class="w"> </span>setprop<span class="w"> </span>libc.debug.malloc.options<span class="w"> </span><span class="nv">backtrace</span><span class="o">=</span><span class="m">16</span>
+</code></pre></div>
+
+<p><strong>常见问题</strong>：</p>
+<ol>
+<li><strong>内存泄漏</strong>：未释放的malloc</li>
+<li><strong>越界访问</strong>：数组越界</li>
+<li><strong>重复释放</strong>：double free</li>
+<li><strong>野指针</strong>：use after free</li>
+</ol>
+<p><strong>JNI内存管理</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 创建全局引用</span>
+<span class="n">jobject</span><span class="w"> </span><span class="n">globalRef</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="n">env</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">NewGlobalRef</span><span class="p">(</span><span class="n">env</span><span class="p">,</span><span class="w"> </span><span class="n">localRef</span><span class="p">);</span>
+<span class="c1">// 及时删除</span>
+<span class="p">(</span><span class="o">*</span><span class="n">env</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">DeleteGlobalRef</span><span class="p">(</span><span class="n">env</span><span class="p">,</span><span class="w"> </span><span class="n">globalRef</span><span class="p">);</span>
+</code></pre></div>
+
+<h4 id="art">ART堆调优</h4>
+<p>ART运行时提供了多种堆调优参数：</p>
+<p><strong>堆大小设置</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">&lt;application</span><span class="w"> </span><span class="na">android:largeHeap=</span><span class="s">&quot;true&quot;</span><span class="nt">&gt;</span>
+</code></pre></div>
+
+<p><strong>运行时参数</strong>：</p>
+<ul>
+<li><code>-Xms</code>: 初始堆大小</li>
+<li><code>-Xmx</code>: 最大堆大小  </li>
+<li><code>-XX:HeapGrowthLimit</code>: 堆增长限制</li>
+<li><code>-XX:HeapTargetUtilization</code>: 目标利用率</li>
+</ul>
+<p><strong>GC调优</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 主动触发GC</span>
+<span class="n">System</span><span class="p">.</span><span class="na">gc</span><span class="p">();</span>
+<span class="n">Runtime</span><span class="p">.</span><span class="na">getRuntime</span><span class="p">().</span><span class="na">gc</span><span class="p">();</span>
+
+<span class="c1">// 获取内存信息</span>
+<span class="n">ActivityManager</span><span class="p">.</span><span class="na">MemoryInfo</span><span class="w"> </span><span class="n">memInfo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ActivityManager</span><span class="p">.</span><span class="na">MemoryInfo</span><span class="p">();</span>
+<span class="n">activityManager</span><span class="p">.</span><span class="na">getMemoryInfo</span><span class="p">(</span><span class="n">memInfo</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>分代管理</strong>：</p>
+<ul>
+<li><strong>Young Generation</strong>: 新对象分配</li>
+<li><strong>Old Generation</strong>: 长期存活对象</li>
+<li><strong>Large Object Space</strong>: 大对象专用</li>
+</ul>
+<p><strong>监控指标</strong>：</p>
+<div class="codehilite"><pre><span></span><code>adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>meminfo<span class="w"> </span>&lt;package&gt;
+<span class="c1"># 查看详细内存使用情况</span>
+</code></pre></div>
+
+<h2 id="4">4. 功耗优化策略</h2>
+<h3 id="41-cpu">4.1 CPU功耗管理</h3>
+<p>CPU是移动设备的主要功耗来源，Android通过多层次的功耗管理机制实现能效优化。</p>
+<h4 id="cpufreq-governor">CPUFreq governor</h4>
+<p>CPUFreq子系统负责动态调整CPU频率，不同的governor实现不同的调频策略：</p>
+<p><strong>常用Governor</strong>：</p>
+<ol>
+<li>
+<p><strong>schedutil</strong> (推荐)：
+   - 与调度器深度集成
+   - 基于CPU利用率调频
+   - 响应更快，更省电</p>
+</li>
+<li>
+<p><strong>interactive</strong>：
+   - Android传统选择
+   - 快速响应用户交互
+   - 可配置的升降频参数</p>
+</li>
+<li>
+<p><strong>ondemand</strong>：
+   - Linux默认governor
+   - 基于负载的调频
+   - 相对保守</p>
+</li>
+<li>
+<p><strong>performance/powersave</strong>：
+   - 固定最高/最低频率
+   - 用于测试和特殊场景</p>
+</li>
+</ol>
+<p><strong>schedutil工作原理</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">freq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">max_freq</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">util</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">max_capacity</span>
+<span class="c1">// util: CPU利用率</span>
+<span class="c1">// max_capacity: CPU最大能力</span>
+</code></pre></div>
+
+<p><strong>调优参数</strong>：</p>
+<ul>
+<li><code>up_rate_limit_us</code>: 升频限制时间</li>
+<li><code>down_rate_limit_us</code>: 降频限制时间  </li>
+<li><code>rate_limit_us</code>: 统一限制时间</li>
+<li><code>hispeed_freq</code>: 高速频率阈值</li>
+</ul>
+<p><strong>监控和调试</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 查看当前governor</span>
+cat<span class="w"> </span>/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+
+<span class="c1"># 查看可用频率</span>
+cat<span class="w"> </span>/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies
+
+<span class="c1"># 实时频率监控</span>
+watch<span class="w"> </span>-n<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="s1">&#39;cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq&#39;</span>
+</code></pre></div>
+
+<h4 id="cpu-idle-states">CPU Idle states</h4>
+<p>CPU空闲时进入不同深度的休眠状态以节省功耗：</p>
+<p><strong>Idle状态级别</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">C0</span><span class="o">:</span><span class="w"> </span><span class="n">Active</span><span class="w"> </span><span class="o">(</span><span class="err">运行状态</span><span class="o">)</span>
+<span class="n">C1</span><span class="o">:</span><span class="w"> </span><span class="n">WFI</span><span class="w"> </span><span class="o">(</span><span class="n">Wait</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Interrupt</span><span class="o">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="err">最浅休眠</span>
+<span class="n">C2</span><span class="o">:</span><span class="w"> </span><span class="err">时钟关闭</span>
+<span class="n">C3</span><span class="o">:</span><span class="w"> </span><span class="err">电源门控</span>
+<span class="n">C4</span><span class="o">+:</span><span class="w"> </span><span class="err">深度休眠，可能关闭缓存</span>
+</code></pre></div>
+
+<p><strong>cpuidle框架</strong>：</p>
+<ul>
+<li><strong>Governor</strong>: 决定进入哪个idle状态</li>
+<li><strong>Driver</strong>: 实现具体的idle状态</li>
+<li><strong>QoS</strong>: 延迟约束管理</li>
+</ul>
+<p><strong>Android优化</strong>：</p>
+<ol>
+<li>
+<p><strong>idle状态选择</strong>：
+   - 考虑唤醒延迟
+   - 预测空闲时长
+   - 平衡功耗和性能</p>
+</li>
+<li>
+<p><strong>cluster idle</strong>：
+   - 整个CPU集群休眠
+   - 更深的省电状态
+   - 需要所有核心空闲</p>
+</li>
+</ol>
+<p><strong>调优建议</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 查看idle状态</span>
+cat<span class="w"> </span>/sys/devices/system/cpu/cpu0/cpuidle/state*/name
+
+<span class="c1"># 禁用深度idle(调试用)</span>
+<span class="nb">echo</span><span class="w"> </span><span class="m">1</span><span class="w"> </span>&gt;<span class="w"> </span>/sys/devices/system/cpu/cpu0/cpuidle/state3/disable
+</code></pre></div>
+
+<h4 id="_13">调频策略优化</h4>
+<p>根据不同场景优化调频策略：</p>
+<p><strong>场景识别</strong>：</p>
+<ol>
+<li><strong>用户交互</strong>：快速升频</li>
+<li><strong>后台任务</strong>：保守调频</li>
+<li><strong>游戏模式</strong>：性能优先</li>
+<li><strong>省电模式</strong>：限制最高频率</li>
+</ol>
+<p><strong>Boost机制</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Input boost</span>
+<span class="n">on_touch_event</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cpu_boost</span><span class="p">(</span><span class="mi">300</span><span class="n">ms</span><span class="p">,</span><span class="w"> </span><span class="mf">1.4</span><span class="n">GHz</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Launch boost  </span>
+<span class="n">on_app_launch</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cpu_boost</span><span class="p">(</span><span class="mi">1000</span><span class="n">ms</span><span class="p">,</span><span class="w"> </span><span class="n">max_freq</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>频率表优化</strong>：</p>
+<ul>
+<li>移除低效频点</li>
+<li>优化电压-频率曲线</li>
+<li>考虑能效比</li>
+</ul>
+<p><strong>与调度器协同</strong>：</p>
+<ul>
+<li>EAS感知的调频</li>
+<li>任务placement影响</li>
+<li>多核协同调频</li>
+</ul>
+<h4 id="turbo-boost">Turbo boost控制</h4>
+<p>现代CPU支持短时超频以提升突发性能：</p>
+<p><strong>Turbo机制</strong>：</p>
+<ul>
+<li>温度允许时提升频率</li>
+<li>功耗预算内最大化性能</li>
+<li>单核/多核turbo区别</li>
+</ul>
+<p><strong>Android管理</strong>：</p>
+<ol>
+<li><strong>thermal限制</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1"># thermal配置</span>
+/vendor/etc/thermal-engine.conf
+</code></pre></div>
+
+<ol start="2">
+<li>
+<p><strong>功耗预算</strong>：
+   - 瞬时功耗限制
+   - 平均功耗限制
+   - 电池温度考虑</p>
+</li>
+<li>
+<p><strong>应用场景</strong>：
+   - 应用启动加速
+   - 相机拍照处理
+   - 游戏加载场景</p>
+</li>
+</ol>
+<p><strong>监控指标</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># CPU温度</span>
+cat<span class="w"> </span>/sys/class/thermal/thermal_zone*/temp
+
+<span class="c1"># 频率限制</span>
+cat<span class="w"> </span>/sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq
+</code></pre></div>
+
+<h3 id="42">4.2 系统级功耗优化</h3>
+<p>Android提供了多种系统级的功耗优化机制。</p>
+<h4 id="doze">Doze模式实现</h4>
+<p>Doze是Android 6.0引入的深度休眠机制：</p>
+<p><strong>Doze状态机</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">ACTIVE</span> <span class="err">→</span> <span class="n">INACTIVE</span> <span class="err">→</span> <span class="n">IDLE_PENDING</span> <span class="err">→</span> <span class="n">SENSING</span> <span class="err">→</span> <span class="n">LOCATING</span> <span class="err">→</span> <span class="n">IDLE</span> <span class="err">→</span> <span class="n">IDLE_MAINTENANCE</span>
+</code></pre></div>
+
+<p><strong>进入条件</strong>：</p>
+<ol>
+<li>屏幕关闭</li>
+<li>电池供电</li>
+<li>静止不动</li>
+<li>未充电</li>
+</ol>
+<p><strong>Doze限制</strong>：</p>
+<ul>
+<li>网络访问暂停</li>
+<li>WakeLock ignored</li>
+<li>Alarm延迟(除AlarmManager.setAlarmClock)</li>
+<li>WiFi扫描停止</li>
+<li>同步适配器暂停</li>
+<li>JobScheduler延迟</li>
+</ul>
+<p><strong>Light Doze</strong>：</p>
+<ul>
+<li>更宽松的限制</li>
+<li>更快进入</li>
+<li>保持网络</li>
+<li>适合口袋场景</li>
+</ul>
+<p><strong>白名单机制</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- 系统白名单 --&gt;</span>
+/system/etc/sysconfig/
+
+<span class="cm">&lt;!-- 应用请求 --&gt;</span>
+<span class="nt">&lt;uses-permission</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS&quot;</span><span class="nt">/&gt;</span>
+</code></pre></div>
+
+<p><strong>调试方法</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 强制进入Doze</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>deviceidle<span class="w"> </span>force-idle
+
+<span class="c1"># 退出Doze</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>deviceidle<span class="w"> </span>unforce
+
+<span class="c1"># 查看状态</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>deviceidle
+</code></pre></div>
+
+<h4 id="app-standby">App Standby机制</h4>
+<p>App Standby限制不常用应用的后台活动：</p>
+<p><strong>Standby分组</strong> (Android P+)：</p>
+<ol>
+<li><strong>Active</strong>: 当前使用</li>
+<li><strong>Working Set</strong>: 经常使用</li>
+<li><strong>Frequent</strong>: 定期使用</li>
+<li><strong>Rare</strong>: 很少使用</li>
+<li><strong>Restricted</strong>: 限制最严</li>
+</ol>
+<p><strong>分组依据</strong>：</p>
+<ul>
+<li>用户交互</li>
+<li>通知interaction</li>
+<li>前台服务</li>
+<li>同步适配器活动</li>
+</ul>
+<p><strong>限制内容</strong>：</p>
+<ul>
+<li>网络访问频率</li>
+<li>作业运行频率</li>
+<li>报警触发频率</li>
+<li>FCM优先级</li>
+</ul>
+<p><strong>豁免条件</strong>：</p>
+<ul>
+<li>前台服务运行</li>
+<li>设备充电</li>
+<li>白名单应用</li>
+</ul>
+<p><strong>API适配</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 查询standby bucket</span>
+<span class="n">UsageStatsManager</span><span class="w"> </span><span class="n">usm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getSystemService</span><span class="p">(</span><span class="n">UsageStatsManager</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">bucket</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">usm</span><span class="p">.</span><span class="na">getAppStandbyBucket</span><span class="p">();</span>
+
+<span class="c1">// 监听变化</span>
+<span class="n">registerReceiver</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">BroadcastReceiver</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onReceive</span><span class="p">(</span><span class="n">Context</span><span class="w"> </span><span class="n">context</span><span class="p">,</span><span class="w"> </span><span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Standby状态改变</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">},</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">IntentFilter</span><span class="p">(</span><span class="n">UsageStatsManager</span><span class="p">.</span><span class="na">ACTION_STANDBY_BUCKET_CHANGED</span><span class="p">));</span>
+</code></pre></div>
+
+<h4 id="jobscheduler">JobScheduler优化</h4>
+<p>JobScheduler提供了智能的后台任务调度：</p>
+<p><strong>优化策略</strong>：</p>
+<ol>
+<li>
+<p><strong>批处理执行</strong>：
+   - 合并相似任务
+   - 统一唤醒时机
+   - 减少唤醒次数</p>
+</li>
+<li>
+<p><strong>条件约束</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">JobInfo</span><span class="p">.</span><span class="na">Builder</span><span class="w"> </span><span class="n">builder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">JobInfo</span><span class="p">.</span><span class="na">Builder</span><span class="p">(</span><span class="n">jobId</span><span class="p">,</span><span class="w"> </span><span class="n">serviceComponent</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">setRequiredNetworkType</span><span class="p">(</span><span class="n">NetworkType</span><span class="p">.</span><span class="na">UNMETERED</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">setRequiresCharging</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">setRequiresDeviceIdle</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">setPersisted</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>延迟容忍</strong>：
+   - <code>setMinimumLatency()</code>: 最小延迟
+   - <code>setOverrideDeadline()</code>: 最大延迟
+   - 让系统选择最优时机</li>
+</ol>
+<p><strong>与Doze协同</strong>：</p>
+<ul>
+<li>Doze期间任务延迟</li>
+<li>Maintenance window执行</li>
+<li>紧急任务使用<code>setImportantWhileForeground()</code></li>
+</ul>
+<p><strong>最佳实践</strong>：</p>
+<ul>
+<li>避免精确时间要求</li>
+<li>合理设置约束条件</li>
+<li>使用WorkManager统一API</li>
+</ul>
+<h4 id="wakelock">WakeLock管理</h4>
+<p>WakeLock防止设备休眠，需要谨慎使用：</p>
+<p><strong>WakeLock类型</strong>：</p>
+<ol>
+<li>
+<p><strong>PARTIAL_WAKE_LOCK</strong>：
+   - CPU保持运行
+   - 屏幕和键盘灯可关闭</p>
+</li>
+<li>
+<p><strong>SCREEN_DIM_WAKE_LOCK</strong>：
+   - CPU、屏幕开启
+   - 屏幕变暗</p>
+</li>
+<li>
+<p><strong>SCREEN_BRIGHT_WAKE_LOCK</strong>：
+   - CPU、屏幕全亮</p>
+</li>
+<li>
+<p><strong>FULL_WAKE_LOCK</strong>：
+   - CPU、屏幕、键盘全开</p>
+</li>
+</ol>
+<p><strong>使用原则</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">PowerManager</span><span class="w"> </span><span class="n">pm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">PowerManager</span><span class="p">)</span><span class="w"> </span><span class="n">getSystemService</span><span class="p">(</span><span class="n">Context</span><span class="p">.</span><span class="na">POWER_SERVICE</span><span class="p">);</span>
+<span class="n">WakeLock</span><span class="w"> </span><span class="n">wl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pm</span><span class="p">.</span><span class="na">newWakeLock</span><span class="p">(</span><span class="n">PowerManager</span><span class="p">.</span><span class="na">PARTIAL_WAKE_LOCK</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;MyApp:MyWakelockTag&quot;</span><span class="p">);</span>
+<span class="n">wl</span><span class="p">.</span><span class="na">acquire</span><span class="p">(</span><span class="n">timeout</span><span class="p">);</span><span class="w"> </span><span class="c1">// 总是设置超时</span>
+<span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 执行工作</span>
+<span class="p">}</span><span class="w"> </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">wl</span><span class="p">.</span><span class="na">release</span><span class="p">();</span><span class="w"> </span><span class="c1">// 确保释放</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>系统优化</strong>：</p>
+<ul>
+<li>WakeLock合并</li>
+<li>自动超时机制</li>
+<li>Doze期间忽略</li>
+<li>电池统计追踪</li>
+</ul>
+<p><strong>调试工具</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 查看WakeLock统计</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>power<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span>wake
+
+<span class="c1"># 查看持有者</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>power<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;Wake Locks&quot;</span>
+</code></pre></div>
+
+<h3 id="43">4.3 硬件协同优化</h3>
+<p>功耗优化需要软硬件协同工作。</p>
+<h4 id="gpu-dvfs">GPU DVFS</h4>
+<p>GPU动态电压频率调节(DVFS)类似CPU调频：</p>
+<p><strong>GPU Governor</strong>：</p>
+<ol>
+<li>
+<p><strong>simple_ondemand</strong>：
+   - 基于GPU负载
+   - 简单有效</p>
+</li>
+<li>
+<p><strong>msm-adreno-tz</strong>：
+   - 高通方案
+   - Trustzone辅助</p>
+</li>
+<li>
+<p><strong>mali_dvfs</strong>：
+   - ARM Mali方案
+   - 多级频率</p>
+</li>
+</ol>
+<p><strong>调优参数</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># GPU频率查看</span>
+cat<span class="w"> </span>/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq
+
+<span class="c1"># 可用频率</span>
+cat<span class="w"> </span>/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies
+
+<span class="c1"># GPU负载</span>
+cat<span class="w"> </span>/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage
+</code></pre></div>
+
+<p><strong>优化策略</strong>：</p>
+<ul>
+<li>根据渲染复杂度调频</li>
+<li>考虑thermal限制</li>
+<li>VSync对齐</li>
+<li>与CPU协同</li>
+</ul>
+<h4 id="display">Display功耗优化</h4>
+<p>显示屏是最大的功耗组件之一：</p>
+<p><strong>硬件特性</strong>：</p>
+<ol>
+<li>
+<p><strong>OLED优化</strong>：
+   - 黑色像素不耗电
+   - 支持Dark mode
+   - AOD (Always On Display)</p>
+</li>
+<li>
+<p><strong>刷新率调节</strong>：
+   - 自适应刷新率
+   - 静态内容降频
+   - 视频匹配帧率</p>
+</li>
+<li>
+<p><strong>亮度管理</strong>：
+   - 自动亮度算法
+   - 环境光感应
+   - 内容自适应</p>
+</li>
+</ol>
+<p><strong>软件优化</strong>：</p>
+<ul>
+<li>HWC (Hardware Composer)优化</li>
+<li>减少过度绘制</li>
+<li>Surface压缩</li>
+<li>Partial update</li>
+</ul>
+<p><strong>LTPO技术</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 动态刷新率</span>
+<span class="n">Display</span><span class="p">.</span><span class="na">Mode</span><span class="o">[]</span><span class="w"> </span><span class="n">modes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">display</span><span class="p">.</span><span class="na">getSupportedModes</span><span class="p">();</span>
+<span class="n">displayManager</span><span class="p">.</span><span class="na">setDesiredDisplayModeSpecs</span><span class="p">(</span>
+<span class="w">    </span><span class="n">displayId</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">Display</span><span class="p">.</span><span class="na">Mode</span><span class="o">[]</span><span class="p">{</span><span class="n">targetMode</span><span class="p">}</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<h4 id="5g-modem">5G modem省电</h4>
+<p>5G带来更大的功耗挑战：</p>
+<p><strong>省电技术</strong>：</p>
+<ol>
+<li>
+<p><strong>EN-DC优化</strong>：
+   - 4G/5G智能切换
+   - 仅数据业务用5G</p>
+</li>
+<li>
+<p><strong>天线功耗</strong>：
+   - 动态天线调谐
+   - MIMO配置优化</p>
+</li>
+<li>
+<p><strong>DRX (非连续接收)</strong>：
+   - 周期性休眠
+   - 快速唤醒</p>
+</li>
+</ol>
+<p><strong>软件策略</strong>：</p>
+<ul>
+<li>应用网络质量感知</li>
+<li>后台限制5G</li>
+<li>智能预取</li>
+<li>连接聚合</li>
+</ul>
+<h4 id="ai">AI加速器功耗控制</h4>
+<p>NPU/DSP等AI加速器的功耗管理：</p>
+<p><strong>功耗特点</strong>：</p>
+<ul>
+<li>瞬时功耗高</li>
+<li>任务突发性</li>
+<li>与CPU/GPU协同</li>
+</ul>
+<p><strong>优化方法</strong>：</p>
+<ol>
+<li>
+<p><strong>任务调度</strong>：
+   - 批处理推理
+   - 负载均衡
+   - 优先级管理</p>
+</li>
+<li>
+<p><strong>精度优化</strong>：
+   - INT8量化
+   - 模型压缩
+   - 动态精度</p>
+</li>
+<li>
+<p><strong>硬件控制</strong>：
+   - 动态电压调节
+   - 核心开关
+   - 内存带宽控制</p>
+</li>
+</ol>
+<p><strong>框架集成</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// NNAPI功耗提示</span>
+<span class="n">ANeuralNetworksCompilation_setPreference</span><span class="p">(</span>
+<span class="w">    </span><span class="n">compilation</span><span class="p">,</span>
+<span class="w">    </span><span class="n">ANEURALNETWORKS_PREFER_LOW_POWER</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p><strong>监控工具</strong>：</p>
+<ul>
+<li>专用功耗计数器</li>
+<li>温度监控</li>
+<li>利用率统计</li>
+</ul>
+<h2 id="_14">本章小结</h2>
+<p>本章深入探讨了Android系统的实时性保证和性能优化策略。我们从Linux内核调度器的Android定制开始，了解了RT调度、EAS能效调度、大小核架构等关键技术。在Jank检测与优化部分，我们分析了Android图形渲染管线、VSYNC机制、Choreographer调度，以及使用Systrace/Perfetto进行性能分析的方法。内存压力处理章节介绍了从LMK到LMKD的演进、PSI压力监控、内存回收策略以及应用层内存优化技巧。最后，我们探讨了从CPU、系统到硬件层面的全方位功耗优化策略。</p>
+<p>关键要点：</p>
+<ul>
+<li>RT调度器为关键任务提供确定性保证，音频、触摸、渲染等子系统依赖RT优先级</li>
+<li>Jank产生有多种原因，需要系统性分析和优化，Perfetto提供了强大的分析能力</li>
+<li>内存管理从内核空间迁移到用户空间带来更大灵活性，PSI提供了更准确的压力信号</li>
+<li>功耗优化需要软硬件协同，从调度器、框架到硬件加速器的全栈优化</li>
+</ul>
+<p>与其他系统对比：</p>
+<ul>
+<li>iOS的GCD和QoS提供了不同的任务优先级模型，更倾向于开发者显式控制</li>
+<li>鸿蒙的分布式软总线需要考虑跨设备的实时性保证</li>
+<li>Android的开放性带来了更多的优化挑战，但也提供了更大的灵活性</li>
+</ul>
+<h2 id="_15">练习题</h2>
+<h3 id="_16">基础题</h3>
+<ol>
+<li><strong>RT调度理解</strong>
+   解释Android中RT调度类与CFS调度类的主要区别，并列举至少3个使用RT调度的系统组件。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑调度策略、优先级范围、抢占规则等方面的差异。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   主要区别：
+
+   - 调度策略：RT使用SCHED_FIFO/SCHED_RR，CFS使用SCHED_NORMAL
+   - 优先级：RT优先级1-99，数值越大优先级越高；CFS使用nice值-20到19
+   - 抢占规则：RT任务总是抢占CFS任务，高优先级RT抢占低优先级
+   - 时间片：RT可以无限运行（受限于rt_runtime），CFS基于虚拟运行时间公平分配
+
+   使用RT调度的组件：
+
+   - AudioFlinger (音频混音线程)
+   - InputDispatcher (触摸事件分发)
+   - SurfaceFlinger (关键渲染路径)
+   - Camera HAL (预览线程)
+   - FastMixer (低延迟音频)
+   </details>
+<ol start="2">
+<li><strong>Jank检测方法</strong>
+   描述如何使用dumpsys gfxinfo命令分析应用的渲染性能，解释输出中的关键指标。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   关注帧时间统计、各阶段耗时、janky帧比例等。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   使用方法：
+   ```bash
+   adb shell dumpsys gfxinfo &lt;package_name&gt;
+   ```
+
+   关键指标：
+
+   - Total frames rendered: 总渲染帧数
+   - Janky frames: 超过阈值的帧数和百分比
+   - 50th/90th/95th/99th percentile: 帧时间分布
+   - Frame time各阶段：Input、Animation、Measure、Layout、Draw、Sync、Command、Swap
+   - Number Missed Vsync: 错过的VSYNC数
+   - Number High input latency: 高输入延迟次数
+
+   通过这些指标可以识别性能瓶颈在哪个阶段。
+   </details>
+<ol start="3">
+<li><strong>内存压力信号</strong>
+   比较vmpressure和PSI两种内存压力监控机制的优缺点。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑准确性、开销、信息粒度等方面。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   vmpressure：
+
+   - 优点：实现简单，开销小，长期稳定
+   - 缺点：粒度粗，只有low/medium/critical三级，可能误报
+
+   PSI (Pressure Stall Information)：
+
+   - 优点：更准确反映实际压力，区分some/full压力，提供时间窗口平均值
+   - 缺点：需要Linux 4.20+，计算开销稍大
+
+   PSI通过追踪任务因资源等待而阻塞的时间，提供了更准确的压力指标，Android Q开始优先使用PSI。
+   </details>
+<ol start="4">
+<li><strong>功耗优化基础</strong>
+   列举Doze模式的进入条件和主要限制，说明Light Doze与Deep Doze的区别。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑设备状态、网络访问、唤醒锁等方面。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   Doze进入条件：
+
+   - 屏幕关闭
+   - 电池供电（未充电）
+   - 设备静止（加速度计检测）
+   - 一段时间无用户交互
+
+   主要限制：
+
+   - 网络访问暂停（除高优先级FCM）
+   - WakeLock被忽略
+   - 标准Alarm延迟（除setAlarmClock）
+   - WiFi扫描停止
+   - 同步和作业延迟执行
+
+   Light Doze vs Deep Doze：
+
+   - Light：设备在口袋中移动时触发，保持网络连接，限制较宽松
+   - Deep：设备完全静止时触发，断开网络，进入深度省电
+   </details>
+<h3 id="_17">挑战题</h3>
+<ol start="5">
+<li><strong>调度器优化方案</strong>
+   设计一个优化方案，解决游戏应用在复杂场景下的卡顿问题。需要考虑CPU调度、GPU渲染、内存管理等多个方面。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   从游戏线程优先级、CPU亲和性、内存预分配、thermal管理等角度思考。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   综合优化方案：
+
+   1. CPU调度优化：
+   - 游戏主线程设置为SCHED_FIFO，RT优先级80-85
+   - 渲染线程绑定到大核，使用CPU亲和性
+   - 启用Game Mode，触发CPU boost
+   - 禁用小核或限制后台任务到小核
+
+   2. 内存管理：
+   - 预分配内存池，避免运行时分配
+   - 调高oom_adj分数，减少被杀概率
+   - 使用mlockall()锁定关键内存页
+   - 提前加载资源，避免运行时IO
+
+   3. GPU优化：
+   - 根据场景复杂度动态调整渲染分辨率
+   - 使用VRS (Variable Rate Shading)
+   - 优化Draw Call批处理
+   - 监控GPU温度，动态调整画质
+
+   4. 系统协同：
+   - 请求性能模式，禁用省电特性
+   - 使用Sustained Performance Mode
+   - 监控thermal状态，提前降低负载
+   - 与厂商游戏加速框架集成
+   </details>
+<ol start="6">
+<li><strong>内存泄漏诊断</strong>
+   一个社交应用在后台运行数小时后被系统频繁杀死，设计完整的诊断和优化流程。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑内存泄漏检测、后台任务优化、内存占用分析等。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   诊断流程：
+
+   1. 初步分析：
+
+
+<div class="codehilite"><pre><span></span><code><span class="c1"># 查看内存信息</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>meminfo<span class="w"> </span>&lt;package&gt;
+<span class="c1"># 查看oom_adj</span>
+adb<span class="w"> </span>shell<span class="w"> </span>cat<span class="w"> </span>/proc/&lt;pid&gt;/oom_adj
+<span class="c1"># 查看内存压力</span>
+adb<span class="w"> </span>shell<span class="w"> </span>cat<span class="w"> </span>/proc/pressure/memory
+</code></pre></div>
+
+
+
+   2. 泄漏检测：
+   - 集成LeakCanary监控泄漏
+   - 使用Android Studio Profiler录制内存
+   - 分析heap dump找到泄漏对象
+   - 检查静态引用、Handler、监听器等
+
+   3. 后台优化：
+   - 将Service改为JobIntentService
+   - 使用WorkManager替代AlarmManager
+   - 及时释放不需要的资源
+   - 实现onTrimMemory()响应内存压力
+
+   4. 内存优化：
+   - 优化图片缓存大小和策略
+   - 使用更高效的数据结构
+   - 减少内存中的数据冗余
+   - Native内存及时释放
+
+   5. 监控方案：
+   - 建立内存使用基准线
+   - 监控关键场景内存增长
+   - 设置内存告警阈值
+   - 定期进行内存回归测试
+   </details>
+<ol start="7">
+<li><strong>跨平台性能对比</strong>
+   分析Android、iOS和鸿蒙在处理高帧率(120Hz)游戏时的架构差异和优化策略。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   从渲染管线、调度策略、功耗管理等角度对比。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   架构对比：
+
+   Android:
+
+   - Choreographer基于VSYNC的帧调度
+   - Triple Buffering减少掉帧
+   - RenderThread独立渲染
+   - 支持Variable Refresh Rate
+   - Vulkan/OpenGL ES渲染
+
+   iOS:
+
+   - CADisplayLink驱动的渲染循环
+   - Metal渲染，更低开销
+   - ProMotion自适应刷新率
+   - 统一内存架构，减少拷贝
+   - 更严格的后台限制
+
+   鸿蒙:
+
+   - 图形图像子系统支持分布式渲染
+   - ArkUI声明式UI框架
+   - 基于Vulkan的统一渲染
+   - 智能调度考虑多设备协同
+   - 方舟编译器优化
+
+   优化策略差异：
+
+   - Android：开放但碎片化，需要适配更多硬件
+   - iOS：封闭优化，硬件软件深度集成
+   - 鸿蒙：分布式场景优化，跨设备体验一致性
+   </details>
+<ol start="8">
+<li><strong>实时音频处理优化</strong>
+   设计一个专业音频应用的低延迟处理方案，要求往返延迟小于10ms。</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">提示</summary>
+   考虑音频HAL、缓冲区大小、线程优先级、CPU亲和性等。
+   </details>
+<details markdown="block">
+   <summary markdown="off">参考答案</summary>
+
+   低延迟方案设计：
+
+   1. 音频路径优化：
+   - 使用AAudio的EXCLUSIVE模式
+   - 设置PERFORMANCE模式
+   - 最小缓冲区配置（2-3个period）
+   - 采样率匹配硬件原生率
+
+   2. 线程配置：
+
+
+<div class="codehilite"><pre><span></span><code><span class="c1">// 音频回调线程</span>
+<span class="n">pthread_setschedparam</span><span class="p">(</span><span class="kr">thread</span><span class="p">,</span><span class="w"> </span><span class="n">SCHED_FIFO</span><span class="p">,</span><span class="w"> </span><span class="mi">95</span><span class="p">);</span>
+<span class="c1">// CPU亲和性</span>
+<span class="kt">cpu_set_t</span><span class="w"> </span><span class="n">cpuset</span><span class="p">;</span>
+<span class="n">CPU_SET</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">cpuset</span><span class="p">);</span><span class="w"> </span><span class="c1">// 绑定到大核</span>
+<span class="n">pthread_setaffinity_np</span><span class="p">(</span><span class="kr">thread</span><span class="p">,</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="n">cpuset</span><span class="p">),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">cpuset</span><span class="p">);</span>
+</code></pre></div>
+
+
+
+   3. 内存优化：
+   - 预分配所有音频缓冲区
+   - 使用lock-free环形缓冲区
+   - mlockall()锁定内存
+   - 避免动态内存分配
+
+   4. 系统配置：
+   - 关闭CPU频率调节
+   - 禁用C-states深度休眠
+   - 提高中断亲和性优先级
+   - 使用RT throttling保护
+
+   5. 延迟测量：
+   - 硬件loopback测试
+   - 时间戳精确测量
+   - 分析各阶段延迟
+   - 持续监控性能指标
+   </details>
+<h2 id="_18">常见陷阱与错误</h2>
+<h3 id="_19">调度器相关</h3>
+<ol>
+<li>
+<p><strong>RT优先级滥用</strong>
+   - 错误：给所有线程设置RT优先级
+   - 后果：系统响应变差，可能导致看门狗超时
+   - 正确：仅关键实时任务使用RT，合理分配优先级</p>
+</li>
+<li>
+<p><strong>CPU亲和性误用</strong>
+   - 错误：将所有线程绑定到大核
+   - 后果：大核过载，小核空闲，功耗增加
+   - 正确：根据任务特性分配，考虑热平衡</p>
+</li>
+</ol>
+<h3 id="_20">性能分析错误</h3>
+<ol start="3">
+<li>
+<p><strong>Systrace数据误读</strong>
+   - 错误：只看单帧数据下结论
+   - 问题：偶发问题被忽略
+   - 正确：收集足够样本，分析分布情况</p>
+</li>
+<li>
+<p><strong>过度优化</strong>
+   - 错误：为了性能牺牲所有功能
+   - 问题：用户体验下降
+   - 正确：平衡性能和功能，数据驱动优化</p>
+</li>
+</ol>
+<h3 id="_21">内存管理陷阱</h3>
+<ol start="5">
+<li>
+<p><strong>内存泄漏忽视</strong>
+   - 错误：认为GC会处理一切
+   - 后果：应用被频繁杀死
+   - 正确：主动检测和修复泄漏</p>
+</li>
+<li>
+<p><strong>Native内存失控</strong>
+   - 错误：只关注Java堆
+   - 问题：Native内存超限导致OOM
+   - 正确：全面监控Java堆和Native内存</p>
+</li>
+</ol>
+<h3 id="_22">功耗优化误区</h3>
+<ol start="7">
+<li>
+<p><strong>WakeLock泄漏</strong>
+   - 错误：acquire后忘记release
+   - 后果：电池快速耗尽
+   - 正确：使用try-finally确保释放</p>
+</li>
+<li>
+<p><strong>忽视后台限制</strong>
+   - 错误：假设后台可以自由运行
+   - 问题：被系统限制或杀死
+   - 正确：适配Doze和App Standby</p>
+</li>
+</ol>
+<h2 id="_23">最佳实践检查清单</h2>
+<h3 id="_24">设计阶段</h3>
+<ul>
+<li>[ ] 识别关键性能路径和实时性要求</li>
+<li>[ ] 设计合理的线程模型和优先级方案</li>
+<li>[ ] 规划内存使用预算和缓存策略</li>
+<li>[ ] 考虑功耗影响，设计省电方案</li>
+<li>[ ] 预留性能监控和分析接口</li>
+</ul>
+<h3 id="_25">开发阶段</h3>
+<ul>
+<li>[ ] 使用适当的调度策略和优先级</li>
+<li>[ ] 实现高效的内存管理和复用</li>
+<li>[ ] 避免主线程阻塞操作</li>
+<li>[ ] 合理使用系统资源（WakeLock、网络等）</li>
+<li>[ ] 添加性能追踪点（Trace.beginSection）</li>
+</ul>
+<h3 id="_26">测试阶段</h3>
+<ul>
+<li>[ ] 使用Systrace/Perfetto分析性能</li>
+<li>[ ] 进行内存泄漏检测（LeakCanary）</li>
+<li>[ ] 测试不同内存压力下的表现</li>
+<li>[ ] 验证Doze模式下的行为</li>
+<li>[ ] 进行功耗测试和优化</li>
+</ul>
+<h3 id="_27">优化阶段</h3>
+<ul>
+<li>[ ] 基于数据识别性能瓶颈</li>
+<li>[ ] 优化关键路径的执行效率</li>
+<li>[ ] 减少内存分配和GC压力</li>
+<li>[ ] 实现自适应性能策略</li>
+<li>[ ] 持续监控线上性能指标</li>
+</ul>
+<h3 id="_28">维护阶段</h3>
+<ul>
+<li>[ ] 建立性能基准线和告警</li>
+<li>[ ] 定期进行性能回归测试</li>
+<li>[ ] 跟踪新版本系统的优化特性</li>
+<li>[ ] 收集用户反馈持续改进</li>
+<li>[ ] 更新文档和最佳实践</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="chapter26.html" class="nav-link prev">← 第26章：Android虚拟化技术</a><a href="chapter28.html" class="nav-link next">第28章：逆向工程与安全研究 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

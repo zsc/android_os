@@ -1,0 +1,1636 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="./">
+    <title>第13章：Android安全模型</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/highlight.css">
+    <script src="assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors', 'ams']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors', '[tex]/ams']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="sidebar-search-input" placeholder="搜索..." autocomplete="off">
+            </div>
+            <div id="tree-container">
+                <nav class="tree-nav" role="tree">
+                    <div class="tree-item " >
+                        <a href="index.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter1.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第1章：Android系统架构概览</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter2.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第2章：Linux内核层定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter3.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第3章：硬件抽象层(HAL)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter4.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第4章：Init进程与系统启动</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter5.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第5章：Zygote与应用进程管理</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter6.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第6章：Android Runtime (ART)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter7.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第7章：Binder IPC机制深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter8.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第8章：系统服务架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter9.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第9章：ContentProvider与数据共享</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter10.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第10章：Android图形系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter11.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第11章：音频系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter12.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第12章：相机与多媒体框架</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item active" >
+                        <a href="chapter13.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第13章：Android安全模型</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter14.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第14章：密钥管理与硬件安全</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter15.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第15章：漏洞案例分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter16.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第16章：Neural Networks API (NNAPI)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter17.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第17章：TensorFlow Lite集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter18.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第18章：ML Kit与设备端AI</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter19.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第19章：NPU/TPU硬件加速</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter20.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第20章：协处理器系统集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter21.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第21章：MIUI系统架构剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter22.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第22章：ColorOS/EMUI技术分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter23.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第23章：厂商内核与驱动定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter24.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第24章：厂商AI能力对比</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter25.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第25章：OriginOS深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter26.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第26章：Android虚拟化技术</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter27.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第27章：实时性与性能优化</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter28.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第28章：逆向工程与安全研究</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter29.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第29章：Android未来演进</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter30.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录A：调试工具与技巧</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter31.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录B：源码编译与定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter32.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第32章：参考资源</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="CLAUDE.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">AndroidOS原理教程项目说明</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="README.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="13android">第13章：Android安全模型</h1>
+<p>Android系统采用多层次、纵深防御的安全架构，从Linux内核到应用层都实施了严格的安全控制。本章将深入剖析Android的安全机制，包括应用沙箱、权限系统、SELinux强制访问控制等核心组件，并与iOS等系统进行技术对比，帮助读者理解移动操作系统安全设计的最佳实践。</p>
+<h2 id="131">13.1 应用沙箱机制</h2>
+<h3 id="1311-uid">13.1.1 UID隔离基础</h3>
+<p>Android继承了Linux的多用户机制，但创新性地将其用于应用隔离。每个应用在安装时都会分配唯一的UID（用户ID），通常从10000开始递增。这种设计使得每个应用都运行在独立的Linux用户空间中。</p>
+<p><strong>UID分配策略</strong>：</p>
+<ul>
+<li>普通应用：UID范围10000-19999 (FIRST_APPLICATION_UID到LAST_APPLICATION_UID)</li>
+<li>隔离进程：99000-99999 (FIRST_ISOLATED_UID到LAST_ISOLATED_UID)</li>
+<li>应用缓存：20000-29999 (FIRST_APP_CACHE_UID到LAST_APP_CACHE_UID)</li>
+<li>系统UID预定义值：</li>
+<li>root (0): 超级用户权限</li>
+<li>system (1000): 系统服务器进程</li>
+<li>radio (1001): 电话子系统</li>
+<li>bluetooth (1002): 蓝牙服务</li>
+<li>graphics (1003): 图形相关服务</li>
+<li>input (1004): 输入子系统</li>
+<li>audio (1005): 音频服务</li>
+<li>camera (1006): 相机服务</li>
+<li>log (1007): 日志服务</li>
+<li>compass (1008): 传感器服务</li>
+<li>mount (1009): 存储挂载服务</li>
+<li>wifi (1010): WiFi服务</li>
+<li>adb (1011): ADB调试服务</li>
+<li>install (1012): 安装服务</li>
+<li>media (1013): 媒体服务器</li>
+<li>dhcp (1014): DHCP客户端</li>
+<li>sdcard_rw (1015): SD卡读写</li>
+<li>vpn (1016): VPN服务</li>
+<li>keystore (1017): 密钥存储</li>
+<li>usb (1018): USB服务</li>
+<li>drm (1019): DRM服务</li>
+<li>mdnsr (1020): mDNS服务</li>
+<li>gps (1021): GPS服务</li>
+<li>media_rw (1023): 媒体存储读写</li>
+<li>mtp (1024): MTP服务</li>
+<li>nfc (1027): NFC服务</li>
+<li>shell (2000): Shell用户</li>
+</ul>
+<p><strong>UID分配实现</strong>：</p>
+<ul>
+<li>PackageManagerService在应用安装时通过<code>mSettings.addUserIdLPw()</code>分配UID</li>
+<li>Settings类维护packages.xml中的UID映射关系</li>
+<li>对于新安装应用，通过<code>acquireAndRegisterNewAppIdLPw()</code>获取未使用的UID</li>
+<li>系统应用使用AndroidManifest.xml中android:sharedUserId指定预定义UID</li>
+<li>共享UID机制允许签名相同的应用共享进程和数据，但Android 29+开始不推荐使用</li>
+</ul>
+<p><strong>多用户支持</strong>：
+Android支持多用户模式，实际UID计算公式：</p>
+<div class="codehilite"><pre><span></span><code>实际UID = userId * 100000 + appId
+</code></pre></div>
+
+<p>其中userId是用户ID（主用户为0），appId是应用的基础ID。这使得同一应用在不同用户下有不同的UID。</p>
+<p><strong>UID权限映射</strong>：
+每个UID对应特定的Linux权限组（GID），控制对系统资源的访问：</p>
+<ul>
+<li>inet (3003): 网络套接字创建</li>
+<li>sdcard_r (1028): SD卡读取</li>
+<li>sdcard_rw (1015): SD卡读写</li>
+<li>bluetooth (1002): 蓝牙设备访问</li>
+<li>camera (1006): 相机设备访问</li>
+</ul>
+<h3 id="1312">13.1.2 进程隔离实现</h3>
+<p>每个应用进程通过Zygote fork创建，继承了完整的安全上下文。Android的进程隔离不仅依赖Linux基础机制，还增加了多层安全增强。</p>
+<p><strong>1. 进程创建与隔离</strong>：</p>
+<p><em>Zygote fork流程</em>：</p>
+<ul>
+<li>Zygote预加载常用类和资源，作为应用进程模板</li>
+<li>ActivityManagerService通过<code>Process.start()</code>请求创建新进程</li>
+<li>Zygote收到socket请求后，执行<code>Zygote.forkAndSpecialize()</code></li>
+<li>fork后的子进程执行<code>handleChildProc()</code>设置安全环境：</li>
+<li>设置进程UID/GID：<code>setuid()</code>/<code>setgid()</code></li>
+<li>设置补充组：<code>setgroups()</code>配置权限组</li>
+<li>设置能力（capabilities）：<code>capset()</code>限制特权</li>
+<li>切换SELinux域：<code>selinux_android_setcontext()</code></li>
+<li>设置进程优先级和调度策略</li>
+<li>配置资源限制（rlimits）</li>
+</ul>
+<p><em>内存隔离机制</em>：</p>
+<ul>
+<li>每个进程独立的虚拟地址空间</li>
+<li>ASLR（地址空间布局随机化）增加攻击难度</li>
+<li>DEP/NX（数据执行保护）防止代码注入</li>
+<li>进程间不能直接访问对方内存，必须通过Binder IPC</li>
+</ul>
+<p><strong>2. 文件系统隔离</strong>：</p>
+<p><em>应用私有存储结构</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">/</span><span class="nx">data</span><span class="o">/</span><span class="nx">data</span><span class="o">/</span><span class="p">&lt;</span><span class="nx">package_name</span><span class="p">&gt;</span><span class="o">/</span>
+<span class="err">├──</span><span class="w"> </span><span class="nx">cache</span><span class="o">/</span><span class="w">          </span><span class="err">#</span><span class="w"> </span><span class="nx">缓存目录</span><span class="err">，</span><span class="nx">可被系统清理</span>
+<span class="err">├──</span><span class="w"> </span><span class="nx">code_cache</span><span class="o">/</span><span class="w">     </span><span class="err">#</span><span class="w"> </span><span class="nx">运行时代码缓存</span>
+<span class="err">├──</span><span class="w"> </span><span class="nx">databases</span><span class="o">/</span><span class="w">      </span><span class="err">#</span><span class="w"> </span><span class="nx">SQLite数据库</span>
+<span class="err">├──</span><span class="w"> </span><span class="nx">files</span><span class="o">/</span><span class="w">          </span><span class="err">#</span><span class="w"> </span><span class="nx">应用私有文件</span>
+<span class="err">├──</span><span class="w"> </span><span class="nx">lib</span><span class="o">/</span><span class="w">            </span><span class="err">#</span><span class="w"> </span><span class="nx">native库软链接</span>
+<span class="err">├──</span><span class="w"> </span><span class="nx">shared_prefs</span><span class="o">/</span><span class="w">   </span><span class="err">#</span><span class="w"> </span><span class="nx">SharedPreferences</span>
+<span class="err">└──</span><span class="w"> </span><span class="nx">no_backup</span><span class="o">/</span><span class="w">      </span><span class="err">#</span><span class="w"> </span><span class="nx">不参与备份的文件</span>
+</code></pre></div>
+
+<p><em>权限设置</em>：</p>
+<ul>
+<li>目录权限：700 (rwx------) 仅应用UID可访问</li>
+<li>文件默认权限：600 (rw-------) </li>
+<li>通过<code>Context.MODE_PRIVATE</code>创建的文件仅本应用可访问</li>
+<li><code>Context.MODE_WORLD_READABLE/WRITEABLE</code>已废弃（安全原因）</li>
+</ul>
+<p><em>外部存储隔离</em>：</p>
+<ul>
+<li>Android 10前：/sdcard通过FUSE实现，所有应用可见</li>
+<li>Android 10+：Scoped Storage，应用专属目录：</li>
+<li><code>/storage/emulated/0/Android/data/&lt;package_name&gt;/</code></li>
+<li><code>/storage/emulated/0/Android/media/&lt;package_name&gt;/</code></li>
+<li><code>/storage/emulated/0/Android/obb/&lt;package_name&gt;/</code></li>
+</ul>
+<p><strong>3. IPC安全限制</strong>：</p>
+<p><em>Binder安全检查</em>：</p>
+<ul>
+<li>内核驱动级别的UID/PID验证</li>
+<li>每次Binder调用自动传递调用者身份</li>
+<li>服务端通过以下API获取调用者信息：</li>
+<li><code>Binder.getCallingUid()</code>: 获取调用者UID</li>
+<li><code>Binder.getCallingPid()</code>: 获取调用者PID  </li>
+<li><code>Binder.getCallingUserHandle()</code>: 获取调用者用户</li>
+<li>身份切换机制：</li>
+<li><code>Binder.clearCallingIdentity()</code>: 临时切换到自己的身份</li>
+<li><code>Binder.restoreCallingIdentity()</code>: 恢复调用者身份</li>
+</ul>
+<p><em>权限enforcement位置</em>：</p>
+<ul>
+<li>系统服务入口：检查调用者是否有required权限</li>
+<li>Context API层：<code>enforceCallingPermission()</code></li>
+<li>Binder接口：通过AIDL注解<code>@EnforcePermission</code></li>
+<li>Native层：通过<code>IPCThreadState::getCallingUid()</code></li>
+</ul>
+<p><strong>4. 其他隔离机制</strong>：</p>
+<p><em>命名空间隔离</em>：</p>
+<ul>
+<li>Mount namespace：隔离文件系统挂载点</li>
+<li>PID namespace：进程ID空间隔离（部分使用）</li>
+<li>Network namespace：网络栈隔离（VPN应用）</li>
+</ul>
+<p><em>资源限制</em>：</p>
+<ul>
+<li>CPU使用：通过cgroups限制</li>
+<li>内存限制：通过memory cgroups和oom_adj</li>
+<li>文件描述符限制：防止资源耗尽攻击</li>
+</ul>
+<h3 id="1313">13.1.3 存储沙箱演进</h3>
+<p>Android存储模型经历了重大变革，从早期的开放模型逐步演进到严格的隔离模型。</p>
+<p><strong>存储架构基础</strong>：</p>
+<p><em>存储类型分类</em>：</p>
+<ol>
+<li>
+<p><strong>内部存储</strong> (/data分区)
+   - 应用私有目录：<code>/data/data/&lt;package_name&gt;/</code>
+   - 应用APK和库：<code>/data/app/&lt;package_name&gt;/</code>
+   - 用户数据：<code>/data/user/&lt;userId&gt;/&lt;package_name&gt;/</code>
+   - 加密特性：默认启用FBE（File-Based Encryption）</p>
+</li>
+<li>
+<p><strong>外部存储</strong> (/storage分区)
+   - 主存储：<code>/storage/emulated/0/</code>
+   - SD卡：<code>/storage/&lt;sdcard_id&gt;/</code>
+   - USB存储：<code>/storage/&lt;usb_id&gt;/</code></p>
+</li>
+</ol>
+<p><strong>Android 10之前的存储模型</strong>：</p>
+<p><em>FUSE实现机制</em>：</p>
+<ul>
+<li>sdcard daemon通过FUSE在用户空间实现文件系统</li>
+<li>基于调用者UID进行权限检查</li>
+<li>性能开销：每次文件操作需要用户态/内核态切换</li>
+</ul>
+<p><em>权限控制</em>：</p>
+<div class="codehilite"><pre><span></span><code>READ_EXTERNAL_STORAGE：
+
+<span class="k">-</span> 读取/sdcard所有文件
+<span class="k">-</span> 自动包含媒体文件访问
+
+WRITE_EXTERNAL_STORAGE：
+
+<span class="k">-</span> 写入/sdcard任意位置
+<span class="k">-</span> 隐含READ权限
+<span class="k">-</span> 可创建任意目录结构
+</code></pre></div>
+
+<p><em>安全问题</em>：</p>
+<ul>
+<li>应用可扫描整个外部存储</li>
+<li>无法阻止恶意应用窃取其他应用数据</li>
+<li>用户文件（照片、文档）完全暴露</li>
+</ul>
+<p><strong>Android 10 Scoped Storage</strong>：</p>
+<p><em>核心设计理念</em>：</p>
+<ul>
+<li>应用只能访问自己创建的文件</li>
+<li>共享文件通过系统API访问</li>
+<li>用户授权的细粒度控制</li>
+</ul>
+<p><em>实现机制</em>：</p>
+<ol>
+<li><strong>应用专属目录</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">Context</span><span class="p">.</span><span class="n">getExternalFilesDir</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">/</span><span class="n">storage</span><span class="o">/</span><span class="n">emulated</span><span class="o">/</span><span class="mi">0</span><span class="o">/</span><span class="n">Android</span><span class="o">/</span><span class="n">data</span><span class="o">/&lt;</span><span class="n">pkg</span><span class="o">&gt;/</span><span class="n">files</span><span class="o">/</span>
+<span class="n">Context</span><span class="p">.</span><span class="n">getExternalCacheDir</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">/</span><span class="n">storage</span><span class="o">/</span><span class="n">emulated</span><span class="o">/</span><span class="mi">0</span><span class="o">/</span><span class="n">Android</span><span class="o">/</span><span class="n">data</span><span class="o">/&lt;</span><span class="n">pkg</span><span class="o">&gt;/</span><span class="n">cache</span><span class="o">/</span>
+<span class="n">Context</span><span class="p">.</span><span class="n">getExternalMediaDirs</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">/</span><span class="n">storage</span><span class="o">/</span><span class="n">emulated</span><span class="o">/</span><span class="mi">0</span><span class="o">/</span><span class="n">Android</span><span class="o">/</span><span class="n">media</span><span class="o">/&lt;</span><span class="n">pkg</span><span class="o">&gt;/</span>
+</code></pre></div>
+
+<ul>
+<li>无需权限即可访问</li>
+<li>应用卸载时自动清理</li>
+<li>不会被媒体扫描器索引（除media目录）</li>
+</ul>
+<ol start="2">
+<li><strong>MediaStore访问</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="err">媒体集合</span><span class="n">URI</span><span class="err">：</span>
+
+<span class="o">-</span><span class="w"> </span><span class="n">MediaStore</span><span class="o">.</span><span class="n">Images</span><span class="o">.</span><span class="n">Media</span><span class="o">.</span><span class="n">EXTERNAL_CONTENT_URI</span>
+<span class="o">-</span><span class="w"> </span><span class="n">MediaStore</span><span class="o">.</span><span class="n">Video</span><span class="o">.</span><span class="n">Media</span><span class="o">.</span><span class="n">EXTERNAL_CONTENT_URI</span><span class="w">  </span>
+<span class="o">-</span><span class="w"> </span><span class="n">MediaStore</span><span class="o">.</span><span class="n">Audio</span><span class="o">.</span><span class="n">Media</span><span class="o">.</span><span class="n">EXTERNAL_CONTENT_URI</span>
+<span class="o">-</span><span class="w"> </span><span class="n">MediaStore</span><span class="o">.</span><span class="n">Downloads</span><span class="o">.</span><span class="n">EXTERNAL_CONTENT_URI</span><span class="w"> </span><span class="p">(</span><span class="n">API</span><span class="w"> </span><span class="mi">29</span><span class="o">+</span><span class="p">)</span>
+</code></pre></div>
+
+<ul>
+<li>通过ContentResolver查询和访问</li>
+<li>自动过滤仅显示应用创建的文件</li>
+<li>访问其他应用文件需要用户选择</li>
+</ul>
+<ol start="3">
+<li><strong>Storage Access Framework (SAF)</strong>：
+   - <code>ACTION_OPEN_DOCUMENT</code>: 选择单个文件
+   - <code>ACTION_OPEN_DOCUMENT_TREE</code>: 选择目录树
+   - <code>ACTION_CREATE_DOCUMENT</code>: 创建新文件
+   - 返回持久化的URI权限</li>
+</ol>
+<p><em>兼容性措施</em>：</p>
+<ul>
+<li><code>requestLegacyExternalStorage="true"</code>: 临时退出（targetSdk&lt;30）</li>
+<li><code>preserveLegacyExternalStorage="true"</code>: 升级时保留旧行为</li>
+</ul>
+<p><strong>Android 11+增强</strong>：</p>
+<p><em>新增限制</em>：</p>
+<ol>
+<li>
+<p><strong>文件路径访问限制</strong>：
+   - 不能通过路径访问其他应用的文件
+   - Environment.getExternalStorageDirectory()废弃
+   - File API仅限应用专属目录</p>
+</li>
+<li>
+<p><strong>MANAGE_EXTERNAL_STORAGE权限</strong>：
+   - 特殊权限，需要用户在设置中授予
+   - 仅限文件管理器等特殊用例
+   - Google Play审核严格限制
+   - 通过<code>ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION</code>请求</p>
+</li>
+<li>
+<p><strong>媒体文件访问优化</strong>：
+   - 批量媒体文件操作：<code>MediaStore.createWriteRequest()</code>
+   - 原生文件路径访问（有限场景）
+   - IS_PENDING标志：处理大文件时防止其他应用访问</p>
+</li>
+</ol>
+<p><strong>Android 12+进一步改进</strong>：</p>
+<p><em>应用存储访问指示器</em>：</p>
+<ul>
+<li>状态栏显示存储访问图标</li>
+<li>隐私仪表板记录访问历史</li>
+</ul>
+<p><em>媒体权限细分</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">READ_MEDIA_IMAGES</span><span class="o">:</span><span class="w"> </span><span class="err">仅图片访问</span>
+<span class="n">READ_MEDIA_VIDEO</span><span class="o">:</span><span class="w"> </span><span class="err">仅视频访问</span><span class="w">  </span>
+<span class="n">READ_MEDIA_AUDIO</span><span class="o">:</span><span class="w"> </span><span class="err">仅音频访问</span>
+<span class="err">替代原有的</span><span class="n">READ_EXTERNAL_STORAGE</span>
+</code></pre></div>
+
+<p><strong>Android 13+最新变化</strong>：</p>
+<p><em>照片选择器</em>：</p>
+<ul>
+<li>系统级UI选择特定照片/视频</li>
+<li>无需完整媒体权限</li>
+<li><code>ACTION_PICK_IMAGES</code>意图</li>
+</ul>
+<p><em>细粒度媒体权限</em>：</p>
+<ul>
+<li>针对音频、图片、视频的独立权限</li>
+<li>更精确的用户控制</li>
+</ul>
+<h3 id="1314">13.1.4 网络沙箱</h3>
+<p>Android实现了细粒度的网络访问控制，从应用层到内核层都有相应的安全机制。</p>
+<p><strong>1. 网络权限控制</strong>：</p>
+<p><em>INTERNET权限机制</em>：</p>
+<ul>
+<li>权限检查位置：socket()系统调用</li>
+<li>内核通过GID检查：inet组(GID=3003)</li>
+<li>无INTERNET权限的应用无法创建网络socket</li>
+<li>实现代码路径：<code>af_inet.c</code>中的权限检查</li>
+</ul>
+<p><em>其他网络相关权限</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">ACCESS_NETWORK_STATE</span><span class="o">:</span><span class="w"> </span><span class="err">读取网络连接状态</span>
+<span class="n">ACCESS_WIFI_STATE</span><span class="o">:</span><span class="w"> </span><span class="err">读取</span><span class="n">WiFi状态信息</span>
+<span class="n">CHANGE_NETWORK_STATE</span><span class="o">:</span><span class="w"> </span><span class="err">修改网络连接</span>
+<span class="n">CHANGE_WIFI_STATE</span><span class="o">:</span><span class="w"> </span><span class="err">修改</span><span class="n">WiFi状态</span>
+<span class="n">ACCESS_FINE_LOCATION</span><span class="o">:</span><span class="w"> </span><span class="n">WiFi</span><span class="o">/</span><span class="err">基站定位需要</span>
+<span class="n">BIND_VPN_SERVICE</span><span class="o">:</span><span class="w"> </span><span class="err">创建</span><span class="n">VPN服务</span>
+</code></pre></div>
+
+<p><strong>2. 网络流量控制（Netd守护进程）</strong>：</p>
+<p><em>UID级别的iptables规则</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 按UID允许/拒绝网络访问</span>
+iptables<span class="w"> </span>-A<span class="w"> </span>fw_OUTPUT<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span>&lt;uid&gt;<span class="w"> </span>-j<span class="w"> </span>ACCEPT/DROP
+
+<span class="c1"># 按UID路由到特定网络接口</span>
+ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>uidrange<span class="w"> </span>&lt;start&gt;-&lt;end&gt;<span class="w"> </span>table<span class="w"> </span>&lt;table_id&gt;
+
+<span class="c1"># 带宽限制</span>
+iptables<span class="w"> </span>-A<span class="w"> </span>bw_costly_&lt;iface&gt;<span class="w"> </span>-m<span class="w"> </span>owner<span class="w"> </span>--uid-owner<span class="w"> </span>&lt;uid&gt;<span class="w"> </span>-j<span class="w"> </span>bw_penalty_box
+</code></pre></div>
+
+<p><em>网络策略实施</em>：</p>
+<ul>
+<li>NetworkPolicyManagerService管理网络策略</li>
+<li>通过Netd设置iptables规则</li>
+<li>支持按UID的流量统计和限制</li>
+<li>后台数据限制实现</li>
+</ul>
+<p><strong>3. VPN隔离机制</strong>：</p>
+<p><em>Per-app VPN</em>：</p>
+<ul>
+<li>VpnService.Builder.addAllowedApplication()：指定应用使用VPN</li>
+<li>VpnService.Builder.addDisallowedApplication()：排除特定应用</li>
+<li>通过路由表和iptables规则实现隔离</li>
+</ul>
+<p><em>实现原理</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">创建tun接口</span><span class="err">：</span><span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">tun</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">设置路由规则</span><span class="err">：</span>
+<span class="w">   </span><span class="n">ip</span><span class="w"> </span><span class="n">rule</span><span class="w"> </span><span class="n">add</span><span class="w"> </span><span class="n">uidrange</span><span class="w"> </span><span class="o">&lt;</span><span class="n">uid</span><span class="o">&gt;</span><span class="w"> </span><span class="nb">tab</span><span class="n">le</span><span class="w"> </span><span class="o">&lt;</span><span class="n">vpn_table</span><span class="o">&gt;</span>
+<span class="w">   </span><span class="n">ip</span><span class="w"> </span><span class="n">route</span><span class="w"> </span><span class="n">add</span><span class="w"> </span><span class="kd">def</span><span class="n">ault</span><span class="w"> </span><span class="n">dev</span><span class="w"> </span><span class="n">tun0</span><span class="w"> </span><span class="nb">tab</span><span class="n">le</span><span class="w"> </span><span class="o">&lt;</span><span class="n">vpn_table</span><span class="o">&gt;</span>
+
+<span class="mf">3.</span><span class="w"> </span><span class="n">iptables标记</span><span class="err">：</span>
+<span class="w">   </span><span class="n">iptables</span><span class="w"> </span><span class="o">-</span><span class="n">t</span><span class="w"> </span><span class="n">mangle</span><span class="w"> </span><span class="o">-</span><span class="n">A</span><span class="w"> </span><span class="n">OUTPUT</span><span class="w"> </span><span class="o">-</span><span class="n">m</span><span class="w"> </span><span class="n">owner</span><span class="w"> </span><span class="o">--</span><span class="n">uid</span><span class="o">-</span><span class="n">owner</span><span class="w"> </span><span class="o">&lt;</span><span class="n">uid</span><span class="o">&gt;</span><span class="w"> </span><span class="o">-</span><span class="n">j</span><span class="w"> </span><span class="n">MARK</span><span class="w"> </span><span class="o">--</span><span class="n">set</span><span class="o">-</span><span class="n">mark</span><span class="w"> </span><span class="o">&lt;</span><span class="n">vpn_mark</span><span class="o">&gt;</span>
+</code></pre></div>
+
+<p><em>Always-on VPN</em>：</p>
+<ul>
+<li>系统启动时自动建立</li>
+<li>可配置阻止非VPN流量</li>
+<li>DevicePolicyManager控制企业VPN</li>
+</ul>
+<p><strong>4. 网络安全增强</strong>：</p>
+<p><em>DNS-over-TLS (Android 9+)</em>：</p>
+<ul>
+<li>Private DNS设置</li>
+<li>自动检测DNS服务器TLS支持</li>
+<li>防止DNS劫持和监听</li>
+</ul>
+<p><em>网络安全配置 (Android 7+)</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- network_security_config.xml --&gt;</span>
+<span class="nt">&lt;network-security-config&gt;</span>
+<span class="w">    </span><span class="nt">&lt;base-config</span><span class="w"> </span><span class="na">cleartextTrafficPermitted=</span><span class="s">&quot;false&quot;</span><span class="nt">&gt;</span>
+<span class="w">        </span><span class="nt">&lt;trust-anchors&gt;</span>
+<span class="w">            </span><span class="nt">&lt;certificates</span><span class="w"> </span><span class="na">src=</span><span class="s">&quot;system&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">            </span><span class="nt">&lt;certificates</span><span class="w"> </span><span class="na">src=</span><span class="s">&quot;user&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">        </span><span class="nt">&lt;/trust-anchors&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/base-config&gt;</span>
+<span class="w">    </span><span class="nt">&lt;domain-config&gt;</span>
+<span class="w">        </span><span class="nt">&lt;domain</span><span class="w"> </span><span class="na">includeSubdomains=</span><span class="s">&quot;true&quot;</span><span class="nt">&gt;</span>example.com<span class="nt">&lt;/domain&gt;</span>
+<span class="w">        </span><span class="nt">&lt;pin-set</span><span class="w"> </span><span class="na">expiration=</span><span class="s">&quot;2025-01-01&quot;</span><span class="nt">&gt;</span>
+<span class="w">            </span><span class="nt">&lt;pin</span><span class="w"> </span><span class="na">digest=</span><span class="s">&quot;SHA-256&quot;</span><span class="nt">&gt;</span>base64==<span class="nt">&lt;/pin&gt;</span>
+<span class="w">        </span><span class="nt">&lt;/pin-set&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/domain-config&gt;</span>
+<span class="nt">&lt;/network-security-config&gt;</span>
+</code></pre></div>
+
+<p><em>证书固定（Certificate Pinning）</em>：</p>
+<ul>
+<li>应用级：NetworkSecurityConfig</li>
+<li>代码级：自定义TrustManager</li>
+<li>系统级：系统证书存储管理</li>
+</ul>
+<p><strong>5. 网络隔离高级特性</strong>：</p>
+<p><em>多网络API (Android 5+)</em>：</p>
+<ul>
+<li>ConnectivityManager.bindProcessToNetwork()：进程绑定到特定网络</li>
+<li>Network.openConnection()：通过特定网络建立连接</li>
+<li>支持同时连接多个网络（WiFi+蜂窝）</li>
+</ul>
+<p><em>网络切片（Network Slicing）</em>：</p>
+<ul>
+<li>5G网络支持</li>
+<li>不同应用使用不同网络切片</li>
+<li>QoS保证和隔离</li>
+</ul>
+<p><em>企业网络隔离</em>：</p>
+<ul>
+<li>Work Profile网络隔离</li>
+<li>企业VPN与个人VPN分离</li>
+<li>MDM控制的网络策略</li>
+</ul>
+<p><strong>6. 网络审计与监控</strong>：</p>
+<p><em>流量统计</em>：</p>
+<ul>
+<li>NetworkStatsService收集UID级别统计</li>
+<li>/proc/net/xt_qtaguid/stats接口</li>
+<li>TrafficStats API供应用查询</li>
+</ul>
+<p><em>网络日志</em>：</p>
+<ul>
+<li>tcpdump需要root权限</li>
+<li>应用级：OkHttp拦截器等</li>
+<li>系统级：netlog调试</li>
+</ul>
+<p><em>防火墙日志</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 启用iptables日志</span>
+iptables<span class="w"> </span>-A<span class="w"> </span>INPUT<span class="w"> </span>-j<span class="w"> </span>LOG<span class="w"> </span>--log-prefix<span class="w"> </span><span class="s2">&quot;[FW_INPUT] &quot;</span>
+<span class="c1"># 查看日志</span>
+logcat<span class="w"> </span>-s<span class="w"> </span>netd
+</code></pre></div>
+
+<h2 id="132">13.2 权限系统演进</h2>
+<h3 id="1321">13.2.1 权限模型基础</h3>
+<p>Android权限系统基于最小权限原则，通过细粒度的权限控制保护用户隐私和系统安全。</p>
+<p><strong>权限层级体系</strong>：</p>
+<p><em>基本权限级别</em>：</p>
+<ol>
+<li>
+<p><strong>normal</strong> (普通权限)
+   - 低风险，安装时自动授予
+   - 例如：INTERNET, ACCESS_NETWORK_STATE, VIBRATE
+   - 不涉及用户隐私数据或其他应用
+   - 占据大部分系统权限</p>
+</li>
+<li>
+<p><strong>dangerous</strong> (危险权限)
+   - 涉及用户隐私或敏感数据
+   - Android 6.0+需要运行时请求
+   - 按权限组管理，授予一个则整组授予
+   - 典型权限组：</p>
+<ul>
+<li>CALENDAR: READ_CALENDAR, WRITE_CALENDAR</li>
+<li>CAMERA: CAMERA</li>
+<li>CONTACTS: READ_CONTACTS, WRITE_CONTACTS, GET_ACCOUNTS</li>
+<li>LOCATION: ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, ACCESS_BACKGROUND_LOCATION</li>
+<li>MICROPHONE: RECORD_AUDIO</li>
+<li>PHONE: READ_PHONE_STATE, CALL_PHONE, READ_CALL_LOG, etc.</li>
+<li>SENSORS: BODY_SENSORS</li>
+<li>SMS: SEND_SMS, RECEIVE_SMS, READ_SMS, etc.</li>
+<li>STORAGE: READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE</li>
+</ul>
+</li>
+<li>
+<p><strong>signature</strong> (签名权限)
+   - 仅授予与声明者相同签名的应用
+   - 用于同一开发者的应用间共享功能
+   - 例如：SIGNAL_PERSISTENT_PROCESSES</p>
+</li>
+<li>
+<p><strong>signature|privileged</strong> (旧称signatureOrSystem)
+   - 签名相同或预装在/system/priv-app
+   - 系统核心功能使用
+   - 例如：INSTALL_PACKAGES, DELETE_PACKAGES</p>
+</li>
+<li>
+<p><strong>privileged</strong> (特权权限)
+   - 仅预装在/system/priv-app的应用
+   - 需要在privapp-permissions.xml中白名单
+   - 例如：CHANGE_COMPONENT_ENABLED_STATE</p>
+</li>
+<li>
+<p><strong>development</strong> (开发权限)
+   - 仅在开发者选项启用时可用
+   - 例如：SET_DEBUG_APP, DUMP</p>
+</li>
+</ol>
+<p><em>权限保护级别属性</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- 在framework-res/AndroidManifest.xml中定义 --&gt;</span>
+<span class="nt">&lt;permission</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.permission.CAMERA&quot;</span>
+<span class="w">    </span><span class="na">android:permissionGroup=</span><span class="s">&quot;android.permission-group.CAMERA&quot;</span>
+<span class="w">    </span><span class="na">android:protectionLevel=</span><span class="s">&quot;dangerous&quot;</span>
+<span class="w">    </span><span class="na">android:label=</span><span class="s">&quot;@string/permlab_camera&quot;</span>
+<span class="w">    </span><span class="na">android:description=</span><span class="s">&quot;@string/permdesc_camera&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+
+<p><strong>权限实现架构</strong>：</p>
+<p><em>权限存储与管理</em>：</p>
+<ol>
+<li>
+<p><strong>静态定义</strong>：
+   - 系统权限：framework-res/AndroidManifest.xml
+   - OEM权限：/system/etc/permissions/
+   - 应用自定义权限：应用AndroidManifest.xml</p>
+</li>
+<li>
+<p><strong>运行时存储</strong>：
+   - <code>/data/system/packages.xml</code>：应用权限授予状态
+   - <code>/data/misc_de/0/apexdata/com.android.permission/</code>：运行时权限状态
+   - 内存中：PackageManagerService.mSettings</p>
+</li>
+<li>
+<p><strong>权限授予记录</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- packages.xml 示例 --&gt;</span>
+<span class="nt">&lt;package</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;com.example.app&quot;</span><span class="w"> </span><span class="nt">&gt;</span>
+<span class="w">    </span><span class="nt">&lt;perms&gt;</span>
+<span class="w">        </span><span class="nt">&lt;item</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;android.permission.CAMERA&quot;</span><span class="w"> </span><span class="na">granted=</span><span class="s">&quot;true&quot;</span><span class="w"> </span><span class="na">flags=</span><span class="s">&quot;0&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">        </span><span class="nt">&lt;item</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;android.permission.INTERNET&quot;</span><span class="w"> </span><span class="na">granted=</span><span class="s">&quot;true&quot;</span><span class="w"> </span><span class="na">flags=</span><span class="s">&quot;0&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/perms&gt;</span>
+<span class="nt">&lt;/package&gt;</span>
+</code></pre></div>
+
+<p><strong>权限检查机制</strong>：</p>
+<p><em>检查流程</em>：</p>
+<ol>
+<li><strong>应用层检查</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="nx">Context</span><span class="p">.</span><span class="nx">checkSelfPermission</span><span class="p">(</span><span class="nx">permission</span><span class="p">)</span>
+<span class="err">→</span><span class="w"> </span><span class="nx">ContextImpl</span><span class="p">.</span><span class="nx">checkPermission</span><span class="p">(</span><span class="nx">permission</span><span class="p">,</span><span class="w"> </span><span class="nx">pid</span><span class="p">,</span><span class="w"> </span><span class="nx">uid</span><span class="p">)</span>
+<span class="err">→</span><span class="w"> </span><span class="nx">ActivityManager</span><span class="p">.</span><span class="nx">checkPermission</span><span class="p">(</span><span class="nx">permission</span><span class="p">,</span><span class="w"> </span><span class="nx">pid</span><span class="p">,</span><span class="w"> </span><span class="nx">uid</span><span class="p">)</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>系统服务检查</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code>ActivityManagerService.checkPermission()
+→ PackageManager.checkUidPermission(permission, uid)
+→ PermissionManagerService.checkUidPermission()
+</code></pre></div>
+
+<ol start="3">
+<li><strong>强制执行</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code>Context.enforcePermission(permission, pid, uid, message)
+→ 抛出SecurityException如果无权限
+</code></pre></div>
+
+<p><em>性能优化</em>：</p>
+<ul>
+<li>PermissionCache缓存常用权限检查结果</li>
+<li>批量权限检查API减少IPC次数</li>
+</ul>
+<p><strong>权限代理机制</strong>：</p>
+<p><em>AppOps系统</em>：</p>
+<ul>
+<li>精细控制应用操作</li>
+<li>跟踪权限使用情况</li>
+<li>支持临时禁用权限</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="c1">// AppOps操作示例</span>
+<span class="nx">AppOpsManager</span><span class="p">.</span><span class="nx">noteOp</span><span class="p">(</span><span class="nx">AppOpsManager</span><span class="p">.</span><span class="nx">OP_CAMERA</span><span class="p">,</span><span class="w"> </span><span class="nx">uid</span><span class="p">,</span><span class="w"> </span><span class="nx">packageName</span><span class="p">)</span>
+<span class="err">→</span><span class="w"> </span><span class="nx">记录权限使用</span>
+<span class="err">→</span><span class="w"> </span><span class="nx">可能返回AppOpsManager</span><span class="p">.</span><span class="nx">MODE_IGNORED禁用操作</span>
+</code></pre></div>
+
+<p><em>权限委托</em>：</p>
+<ul>
+<li>URI权限：<code>Intent.FLAG_GRANT_READ_URI_PERMISSION</code></li>
+<li>临时权限授予给其他应用</li>
+<li>用于分享文件等场景</li>
+</ul>
+<h3 id="1322-android-60">13.2.2 运行时权限（Android 6.0+）</h3>
+<p>运行时权限彻底改变了危险权限的授予方式，大幅提升了用户对隐私的控制能力。</p>
+<p><strong>核心设计理念</strong>：</p>
+<ol>
+<li><strong>上下文相关授权</strong>：用户在使用功能时授权，更容易理解</li>
+<li><strong>可撤销权限</strong>：用户可随时在设置中撤销已授予权限</li>
+<li><strong>权限组简化</strong>：减少用户决策次数</li>
+<li><strong>兼容性设计</strong>：旧应用保持安装时授权行为</li>
+</ol>
+<p><strong>实现架构</strong>：</p>
+<p><em>系统组件</em>：</p>
+<ol>
+<li>
+<p><strong>PermissionController</strong> (原名PackageInstaller)
+   - 系统应用，负责权限UI展示
+   - 位置：/system/priv-app/PermissionController/
+   - 提供GrantPermissionsActivity处理权限请求
+   - 管理权限设置页面</p>
+</li>
+<li>
+<p><strong>PermissionManagerService</strong>
+   - 系统服务，管理权限状态
+   - 处理权限授予/撤销逻辑
+   - 维护权限组关系
+   - 同步权限状态到存储</p>
+</li>
+<li>
+<p><strong>AppOpsService</strong>
+   - 跟踪权限使用情况
+   - 支持临时禁用权限
+   - 提供使用统计数据</p>
+</li>
+</ol>
+<p><strong>权限请求流程</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">应用调用</span><span class="err">：</span><span class="n">requestPermissions</span><span class="p">(</span><span class="n">permissions</span><span class="err">[]</span><span class="p">,</span><span class="w"> </span><span class="n">requestCode</span><span class="p">)</span>
+<span class="w">   </span><span class="err">↓</span>
+
+<span class="mf">2.</span><span class="w"> </span><span class="n">ActivityManagerService处理请求</span>
+<span class="w">   </span><span class="err">↓</span>
+
+<span class="mf">3.</span><span class="w"> </span><span class="n">启动PermissionController中的GrantPermissionsActivity</span>
+<span class="w">   </span><span class="err">↓</span>
+
+<span class="mf">4.</span><span class="w"> </span><span class="n">用户做出选择</span><span class="err">（</span><span class="n">允许</span><span class="o">/</span><span class="n">拒绝</span><span class="o">/</span><span class="n">仅在使用期间允许</span><span class="err">）</span>
+<span class="w">   </span><span class="err">↓</span>
+
+<span class="mf">5.</span><span class="w"> </span><span class="n">PermissionManagerService更新权限状态</span>
+<span class="w">   </span><span class="err">↓</span>
+
+<span class="mf">6.</span><span class="w"> </span><span class="n">回调应用的onRequestPermissionsResult</span><span class="p">()</span>
+</code></pre></div>
+
+<p><strong>权限状态管理</strong>：</p>
+<p><em>权限授予状态</em>：</p>
+<ul>
+<li>PERMISSION_GRANTED：已授予</li>
+<li>PERMISSION_DENIED：未授予</li>
+<li>PERMISSION_DENIED_APP_OP：通过AppOps禁用</li>
+</ul>
+<p><em>权限标志</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// PermissionInfo.java中的标志</span>
+<span class="n">FLAG_COSTS_MONEY</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="mi">0</span><span class="p">;</span><span class="w">        </span><span class="c1">// 可能产生费用</span>
+<span class="n">FLAG_REMOVED</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="mi">1</span><span class="p">;</span><span class="w">             </span><span class="c1">// 已移除的权限</span>
+<span class="n">FLAG_HARD_RESTRICTED</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="mi">2</span><span class="p">;</span><span class="w">     </span><span class="c1">// 硬性限制权限</span>
+<span class="n">FLAG_SOFT_RESTRICTED</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="mi">3</span><span class="p">;</span><span class="w">     </span><span class="c1">// 软性限制权限</span>
+<span class="n">FLAG_IMMUTABLY_RESTRICTED</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="mi">4</span><span class="p">;</span><span class="w"> </span><span class="c1">// 不可变限制</span>
+</code></pre></div>
+
+<p><em>持久化存储</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- runtime-permissions.xml --&gt;</span>
+<span class="nt">&lt;runtime-permissions</span><span class="w"> </span><span class="na">fingerprint=</span><span class="s">&quot;...&quot;</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;pkg</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;com.example.app&quot;</span><span class="nt">&gt;</span>
+<span class="w">    </span><span class="nt">&lt;perm</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;android.permission.CAMERA&quot;</span><span class="w"> </span><span class="na">granted=</span><span class="s">&quot;true&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;perm</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;android.permission.LOCATION&quot;</span><span class="w"> </span><span class="na">granted=</span><span class="s">&quot;false&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;/pkg&gt;</span>
+<span class="nt">&lt;/runtime-permissions&gt;</span>
+</code></pre></div>
+
+<p><strong>权限组机制</strong>：</p>
+<p><em>权限组定义</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">&lt;permission-group</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.permission-group.LOCATION&quot;</span>
+<span class="w">    </span><span class="na">android:icon=</span><span class="s">&quot;@drawable/perm_group_location&quot;</span>
+<span class="w">    </span><span class="na">android:label=</span><span class="s">&quot;@string/permgroup_location&quot;</span>
+<span class="w">    </span><span class="na">android:description=</span><span class="s">&quot;@string/permgroup_location_description&quot;</span>
+<span class="w">    </span><span class="na">android:priority=</span><span class="s">&quot;400&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+
+<p><em>权限组授予规则</em>：</p>
+<ul>
+<li>同组权限一起授予（Android 6.0-7.1）</li>
+<li>Android 8.0+改为单独授予，但UI仍按组展示</li>
+<li>组内已授予权限不再弹窗</li>
+</ul>
+<p><strong>高级特性</strong>：</p>
+<p><em>自动撤销机制 (Android 11+)</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 应用长时间未使用时自动撤销权限</span>
+<span class="kd">val</span><span class="w"> </span><span class="nv">unusedAppRestrictionsStatus</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>
+<span class="w">    </span><span class="n">packageManager</span><span class="p">.</span><span class="na">getUnusedAppRestrictionsStatus</span><span class="p">()</span>
+
+<span class="k">when</span><span class="w"> </span><span class="p">(</span><span class="n">unusedAppRestrictionsStatus</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">FEATURE_NOT_AVAILABLE</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="c1">// 功能不可用</span>
+<span class="w">    </span><span class="n">DISABLED</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="c1">// 已禁用自动撤销</span>
+<span class="w">    </span><span class="n">API_30_BACKPORT</span><span class="p">,</span><span class="w"> </span><span class="n">API_31</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="c1">// 启用中</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><em>单次授权 (Android 11+)</em>：</p>
+<ul>
+<li>“仅此一次”选项</li>
+<li>应用退到后台后自动撤销</li>
+<li>通过ActivityManager监听应用生命周期</li>
+</ul>
+<p><em>权限使用说明</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 判断是否需要显示使用说明</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">shouldShowRequestPermissionRationale</span><span class="p">(</span><span class="n">permission</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 显示为什么需要这个权限</span>
+<span class="w">    </span><span class="c1">// 然后再次请求</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>兼容性处理</strong>：</p>
+<p><em>targetSdkVersion影响</em>：</p>
+<ul>
+<li>&lt; 23：保持安装时授权，但用户可在设置中撤销</li>
+<li>
+<blockquote>
+<p>= 23：必须实现运行时权限逻辑</p>
+</blockquote>
+</li>
+</ul>
+<p><em>降级处理</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 旧应用在权限被撤销后</span>
+<span class="c1">// 相关API返回空值或默认值</span>
+<span class="c1">// 例如：getLastKnownLocation()返回null</span>
+</code></pre></div>
+
+<h3 id="1323-android-10">13.2.3 权限使用审计（Android 10+）</h3>
+<p>Android引入了更透明的权限使用跟踪，让用户能够清楚了解应用如何使用授予的权限。</p>
+<p><strong>1. 位置权限改革</strong>：</p>
+<p><em>三级位置权限体系</em>：</p>
+<ol>
+<li>
+<p><strong>前台位置权限</strong>
+   - ACCESS_COARSE_LOCATION：粗略位置（精度约2km）
+   - ACCESS_FINE_LOCATION：精确位置（GPS级别）
+   - 仅在应用前台运行时可用
+   - 包括前台服务场景</p>
+</li>
+<li>
+<p><strong>后台位置权限</strong> (Android 10+)
+   - ACCESS_BACKGROUND_LOCATION
+   - 必须先获得前台位置权限
+   - 需要单独请求，不能与前台一起
+   - 用户选择“始终允许”才授予</p>
+</li>
+<li>
+<p><strong>用户选项增强</strong> (Android 11+)
+   - “仅在使用应用时”
+   - “仅此一次”
+   - “拒绝”
+   - “拒绝且不再询问”</p>
+</li>
+</ol>
+<p><em>位置精度降级</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 用户可以选择仅授予粗略位置</span>
+<span class="c1">// 即使应用请求ACCESS_FINE_LOCATION</span>
+<span class="n">LocationManager</span><span class="w"> </span><span class="n">locationManager</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getSystemService</span><span class="p">(</span><span class="n">LocationManager</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">locationManager</span><span class="p">.</span><span class="na">isProviderEnabled</span><span class="p">(</span><span class="n">LocationManager</span><span class="p">.</span><span class="na">GPS_PROVIDER</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 可能被系统降级为网络位置</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>2. 权限使用指示器</strong>：</p>
+<p><em>实时指示器 (Android 12+)</em>：</p>
+<ul>
+<li>状态栏右上角绿色圆点</li>
+<li>点击显示使用详情</li>
+<li>摄像头：📷 图标</li>
+<li>麦克风：🎤 图标</li>
+<li>位置：📍 图标</li>
+</ul>
+<p><em>指示器实现</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// PermissionUsageHelper.java</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">PermissionUsageHelper</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 监听权限使用</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">startListeningForPermissionUsage</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">mAppOpsManager</span><span class="p">.</span><span class="na">startWatchingActive</span><span class="p">(</span>
+<span class="w">            </span><span class="n">OPSTR_CAMERA</span><span class="p">,</span><span class="w"> </span><span class="n">OPSTR_RECORD_AUDIO</span><span class="p">,</span>
+<span class="w">            </span><span class="n">mExecutor</span><span class="p">,</span><span class="w"> </span><span class="n">mActiveOpListener</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 更新指示器状态</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">updateIndicatorState</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">op</span><span class="p">,</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="n">active</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">active</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">showIndicator</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">hideIndicator</span><span class="p">(</span><span class="n">op</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>3. 隐私仪表板</strong>：</p>
+<p><em>功能特性</em>：</p>
+<ul>
+<li>24小时内权限使用时间轴</li>
+<li>按应用分组显示</li>
+<li>支持撤销权限快捷入口</li>
+<li>显示访问次数和时长</li>
+</ul>
+<p><em>数据收集</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// AppOpsService记录使用事件</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">AppOpsService</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">noteOperationUnchecked</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">code</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">uid</span><span class="p">,</span><span class="w"> </span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">packageName</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">attributionTag</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 记录操作时间戳</span>
+<span class="w">        </span><span class="n">Op</span><span class="w"> </span><span class="n">op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getOpLocked</span><span class="p">(</span><span class="n">ops</span><span class="p">,</span><span class="w"> </span><span class="n">code</span><span class="p">,</span><span class="w"> </span><span class="n">uid</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span>
+<span class="w">        </span><span class="n">op</span><span class="p">.</span><span class="na">noteOpCount</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="n">op</span><span class="p">.</span><span class="na">time</span><span class="o">[</span><span class="n">uidState</span><span class="p">.</span><span class="na">state</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="na">currentTimeMillis</span><span class="p">();</span>
+
+<span class="w">        </span><span class="c1">// 发送到PermissionController</span>
+<span class="w">        </span><span class="n">mHistoricalRegistry</span><span class="p">.</span><span class="na">noteOp</span><span class="p">(</span><span class="n">code</span><span class="p">,</span><span class="w"> </span><span class="n">uid</span><span class="p">,</span><span class="w"> </span><span class="n">packageName</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><em>UI展示</em>：</p>
+<ul>
+<li>设置 → 隐私 → 权限管理器</li>
+<li>点击具体权限查看使用历史</li>
+<li>支持按时间筛选</li>
+</ul>
+<p><strong>4. 权限使用审计API</strong>：</p>
+<p><em>开发者API</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 获取权限使用记录</span>
+<span class="n">AppOpsManager</span><span class="w"> </span><span class="n">appOpsManager</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getSystemService</span><span class="p">(</span><span class="n">AppOpsManager</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="n">List</span><span class="o">&lt;</span><span class="n">AppOpsManager</span><span class="p">.</span><span class="na">PackageOps</span><span class="o">&gt;</span><span class="w"> </span><span class="n">packages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>
+<span class="w">    </span><span class="n">appOpsManager</span><span class="p">.</span><span class="na">getPackagesForOps</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="kt">int</span><span class="o">[]</span><span class="p">{</span><span class="n">OP_CAMERA</span><span class="p">});</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">PackageOps</span><span class="w"> </span><span class="n">pkg</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">packages</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">OpEntry</span><span class="w"> </span><span class="n">op</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">pkg</span><span class="p">.</span><span class="na">getOps</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">long</span><span class="w"> </span><span class="n">lastAccessTime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">op</span><span class="p">.</span><span class="na">getLastAccessTime</span><span class="p">();</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">accessCount</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">op</span><span class="p">.</span><span class="na">getAccessCount</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><em>系统审计日志</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 查看权限使用日志</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dumpsys<span class="w"> </span>appops
+
+<span class="c1"># 输出示例</span>
+Uid<span class="w"> </span><span class="m">10123</span>:
+<span class="w">  </span>Package<span class="w"> </span>com.example.app:
+<span class="w">    </span>CAMERA<span class="w"> </span><span class="o">(</span>allow<span class="w"> </span>/<span class="w"> </span>switch<span class="w"> </span><span class="nv">COARSE_LOCATION</span><span class="o">=</span>allow<span class="o">)</span>:
+<span class="w">      </span>Access:<span class="w"> </span><span class="o">[</span>fg-s<span class="o">]</span><span class="w"> </span><span class="m">2024</span>-01-15<span class="w"> </span><span class="m">10</span>:30:15.123<span class="w"> </span><span class="o">(</span>-5m32s<span class="o">)</span>
+<span class="w">      </span>Reject:<span class="w"> </span><span class="o">[</span>bg<span class="o">]</span><span class="w"> </span><span class="m">2024</span>-01-15<span class="w"> </span><span class="m">09</span>:15:00.000<span class="w"> </span><span class="o">(</span>-1h20m47s<span class="o">)</span>
+</code></pre></div>
+
+<p><strong>5. 数据访问审计 (Android 11+)</strong>：</p>
+<p><em>数据访问记录</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 应用可以记录自己的数据访问</span>
+<span class="n">AppOpsManager</span><span class="p">.</span><span class="na">OnOpNotedCallback</span><span class="w"> </span><span class="n">callback</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">OnOpNotedCallback</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onOpNoted</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">op</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">attributionTag</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Log</span><span class="p">.</span><span class="na">d</span><span class="p">(</span><span class="n">TAG</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Permission &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">op</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; was used&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+<span class="n">appOpsManager</span><span class="p">.</span><span class="na">setOnOpNotedCallback</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span><span class="w"> </span><span class="n">callback</span><span class="p">);</span>
+</code></pre></div>
+
+<p><em>归因标签（Attribution Tags）</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- AndroidManifest.xml --&gt;</span>
+<span class="nt">&lt;attribution</span>
+<span class="w">    </span><span class="na">android:tag=</span><span class="s">&quot;location_feature&quot;</span>
+<span class="w">    </span><span class="na">android:label=</span><span class="s">&quot;@string/location_feature_label&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="c1">// 使用归因标签</span>
+<span class="n">Context</span><span class="w"> </span><span class="n">attributionContext</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>
+<span class="w">    </span><span class="n">createAttributionContext</span><span class="p">(</span><span class="s">&quot;location_feature&quot;</span><span class="p">);</span>
+<span class="n">LocationManager</span><span class="w"> </span><span class="n">locationManager</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>
+<span class="w">    </span><span class="n">attributionContext</span><span class="p">.</span><span class="na">getSystemService</span><span class="p">(</span><span class="n">LocationManager</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="c1">// 此时位置访问会记录归因标签</span>
+</code></pre></div>
+
+<p><strong>6. 自动重置机制</strong>：</p>
+<p><em>未使用应用权限自动重置 (Android 11+)</em>：</p>
+<ul>
+<li>几个月未使用的应用</li>
+<li>自动撤销运行时权限</li>
+<li>用户可以禁用此功能</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 检查自动重置状态</span>
+<span class="n">PackageManager</span><span class="w"> </span><span class="n">pm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getPackageManager</span><span class="p">();</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pm</span><span class="p">.</span><span class="na">isAutoRevokeWhitelisted</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 应用已豁免自动重置</span>
+<span class="p">}</span>
+
+<span class="c1">// 引导用户禁用自动重置</span>
+<span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span>
+<span class="w">    </span><span class="n">Intent</span><span class="p">.</span><span class="na">ACTION_AUTO_REVOKE_PERMISSIONS</span><span class="p">,</span>
+<span class="w">    </span><span class="n">Uri</span><span class="p">.</span><span class="na">parse</span><span class="p">(</span><span class="s">&quot;package:&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">getPackageName</span><span class="p">()));</span>
+<span class="n">startActivity</span><span class="p">(</span><span class="n">intent</span><span class="p">);</span>
+</code></pre></div>
+
+<h3 id="1324">13.2.4 特殊权限机制</h3>
+<p>某些敏感操作需要特殊权限，这些权限不能通过普通的运行时权限流程授予。</p>
+<p><strong>1. 系统设置权限</strong>：</p>
+<p><em>SYSTEM_ALERT_WINDOW (悬浮窗)</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 检查权限</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">Settings</span><span class="p">.</span><span class="na">canDrawOverlays</span><span class="p">(</span><span class="k">this</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 请求权限</span>
+<span class="w">    </span><span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span>
+<span class="w">        </span><span class="n">Settings</span><span class="p">.</span><span class="na">ACTION_MANAGE_OVERLAY_PERMISSION</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Uri</span><span class="p">.</span><span class="na">parse</span><span class="p">(</span><span class="s">&quot;package:&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">getPackageName</span><span class="p">()));</span>
+<span class="w">    </span><span class="n">startActivityForResult</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span><span class="w"> </span><span class="n">REQUEST_CODE</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// 使用悬浮窗</span>
+<span class="n">WindowManager</span><span class="p">.</span><span class="na">LayoutParams</span><span class="w"> </span><span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">WindowManager</span><span class="p">.</span><span class="na">LayoutParams</span><span class="p">(</span>
+<span class="w">    </span><span class="n">WindowManager</span><span class="p">.</span><span class="na">LayoutParams</span><span class="p">.</span><span class="na">TYPE_APPLICATION_OVERLAY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">WindowManager</span><span class="p">.</span><span class="na">LayoutParams</span><span class="p">.</span><span class="na">FLAG_NOT_FOCUSABLE</span><span class="p">,</span>
+<span class="w">    </span><span class="n">PixelFormat</span><span class="p">.</span><span class="na">TRANSLUCENT</span><span class="p">);</span>
+<span class="n">windowManager</span><span class="p">.</span><span class="na">addView</span><span class="p">(</span><span class="n">floatingView</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">);</span>
+</code></pre></div>
+
+<p><em>WRITE_SETTINGS (修改系统设置)</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 检查权限</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">Settings</span><span class="p">.</span><span class="na">System</span><span class="p">.</span><span class="na">canWrite</span><span class="p">(</span><span class="k">this</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span>
+<span class="w">        </span><span class="n">Settings</span><span class="p">.</span><span class="na">ACTION_MANAGE_WRITE_SETTINGS</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Uri</span><span class="p">.</span><span class="na">parse</span><span class="p">(</span><span class="s">&quot;package:&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">getPackageName</span><span class="p">()));</span>
+<span class="w">    </span><span class="n">startActivityForResult</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span><span class="w"> </span><span class="n">REQUEST_CODE</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// 修改设置</span>
+<span class="n">Settings</span><span class="p">.</span><span class="na">System</span><span class="p">.</span><span class="na">putInt</span><span class="p">(</span>
+<span class="w">    </span><span class="n">getContentResolver</span><span class="p">(),</span>
+<span class="w">    </span><span class="n">Settings</span><span class="p">.</span><span class="na">System</span><span class="p">.</span><span class="na">SCREEN_BRIGHTNESS</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="n">brightness</span><span class="p">);</span>
+</code></pre></div>
+
+<p><em>REQUEST_INSTALL_PACKAGES (安装应用)</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Android 8.0+需要此权限</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">getPackageManager</span><span class="p">().</span><span class="na">canRequestPackageInstalls</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span>
+<span class="w">        </span><span class="n">Settings</span><span class="p">.</span><span class="na">ACTION_MANAGE_UNKNOWN_APP_SOURCES</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Uri</span><span class="p">.</span><span class="na">parse</span><span class="p">(</span><span class="s">&quot;package:&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">getPackageName</span><span class="p">()));</span>
+<span class="w">    </span><span class="n">startActivityForResult</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span><span class="w"> </span><span class="n">REQUEST_CODE</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// 安装APK</span>
+<span class="n">Intent</span><span class="w"> </span><span class="n">installIntent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span><span class="n">Intent</span><span class="p">.</span><span class="na">ACTION_VIEW</span><span class="p">);</span>
+<span class="n">installIntent</span><span class="p">.</span><span class="na">setDataAndType</span><span class="p">(</span><span class="n">apkUri</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="s">&quot;application/vnd.android.package-archive&quot;</span><span class="p">);</span>
+<span class="n">installIntent</span><span class="p">.</span><span class="na">setFlags</span><span class="p">(</span><span class="n">Intent</span><span class="p">.</span><span class="na">FLAG_GRANT_READ_URI_PERMISSION</span><span class="p">);</span>
+<span class="n">startActivity</span><span class="p">(</span><span class="n">installIntent</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>2. 辅助功能权限</strong>：</p>
+<p><em>AccessibilityService</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- 服务声明 --&gt;</span>
+<span class="nt">&lt;service</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;.MyAccessibilityService&quot;</span>
+<span class="w">    </span><span class="na">android:permission=</span><span class="s">&quot;android.permission.BIND_ACCESSIBILITY_SERVICE&quot;</span><span class="nt">&gt;</span>
+<span class="w">    </span><span class="nt">&lt;intent-filter&gt;</span>
+<span class="w">        </span><span class="nt">&lt;action</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.accessibilityservice.AccessibilityService&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/intent-filter&gt;</span>
+<span class="w">    </span><span class="nt">&lt;meta-data</span>
+<span class="w">        </span><span class="na">android:name=</span><span class="s">&quot;android.accessibilityservice&quot;</span>
+<span class="w">        </span><span class="na">android:resource=</span><span class="s">&quot;@xml/accessibility_service_config&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/service&gt;</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- accessibility_service_config.xml --&gt;</span>
+<span class="nt">&lt;accessibility-service</span>
+<span class="w">    </span><span class="na">android:accessibilityEventTypes=</span><span class="s">&quot;typeAllMask&quot;</span>
+<span class="w">    </span><span class="na">android:accessibilityFeedbackType=</span><span class="s">&quot;feedbackGeneric&quot;</span>
+<span class="w">    </span><span class="na">android:accessibilityFlags=</span><span class="s">&quot;flagReportViewIds|flagRetrieveInteractiveWindows&quot;</span>
+<span class="w">    </span><span class="na">android:canRetrieveWindowContent=</span><span class="s">&quot;true&quot;</span>
+<span class="w">    </span><span class="na">android:canPerformGestures=</span><span class="s">&quot;true&quot;</span>
+<span class="w">    </span><span class="na">android:description=</span><span class="s">&quot;@string/accessibility_service_description&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+
+<p><em>能力范围</em>：</p>
+<ul>
+<li>读取屏幕内容</li>
+<li>模拟用户输入</li>
+<li>监听系统事件</li>
+<li>执行全局手势</li>
+</ul>
+<p><strong>3. 设备管理权限</strong>：</p>
+<p><em>DeviceAdminReceiver</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="cm">&lt;!-- 设备管理器声明 --&gt;</span>
+<span class="nt">&lt;receiver</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;.DeviceAdminReceiver&quot;</span>
+<span class="w">    </span><span class="na">android:permission=</span><span class="s">&quot;android.permission.BIND_DEVICE_ADMIN&quot;</span><span class="nt">&gt;</span>
+<span class="w">    </span><span class="nt">&lt;meta-data</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.app.device_admin&quot;</span>
+<span class="w">        </span><span class="na">android:resource=</span><span class="s">&quot;@xml/device_admin&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;intent-filter&gt;</span>
+<span class="w">        </span><span class="nt">&lt;action</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.app.action.DEVICE_ADMIN_ENABLED&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/intent-filter&gt;</span>
+<span class="nt">&lt;/receiver&gt;</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="c1">// 激活设备管理器</span>
+<span class="n">ComponentName</span><span class="w"> </span><span class="n">adminComponent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ComponentName</span><span class="p">(</span><span class="k">this</span><span class="p">,</span><span class="w"> </span><span class="n">DeviceAdminReceiver</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span><span class="n">DevicePolicyManager</span><span class="p">.</span><span class="na">ACTION_ADD_DEVICE_ADMIN</span><span class="p">);</span>
+<span class="n">intent</span><span class="p">.</span><span class="na">putExtra</span><span class="p">(</span><span class="n">DevicePolicyManager</span><span class="p">.</span><span class="na">EXTRA_DEVICE_ADMIN</span><span class="p">,</span><span class="w"> </span><span class="n">adminComponent</span><span class="p">);</span>
+<span class="n">startActivityForResult</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span><span class="w"> </span><span class="n">REQUEST_ENABLE</span><span class="p">);</span>
+
+<span class="c1">// 使用管理功能</span>
+<span class="n">DevicePolicyManager</span><span class="w"> </span><span class="n">dpm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getSystemService</span><span class="p">(</span><span class="n">DevicePolicyManager</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">lockNow</span><span class="p">();</span><span class="w"> </span><span class="c1">// 锁定设备</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">resetPassword</span><span class="p">(</span><span class="s">&quot;newpassword&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span><span class="w"> </span><span class="c1">// 重置密码</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">wipeData</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span><span class="w"> </span><span class="c1">// 清除数据</span>
+</code></pre></div>
+
+<p><em>DeviceOwner/ProfileOwner</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 设置DeviceOwner（需要设备未配置）</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dpm<span class="w"> </span>set-device-owner<span class="w"> </span>com.example.app/.DeviceAdminReceiver
+
+<span class="c1"># 设置ProfileOwner（Work Profile）</span>
+adb<span class="w"> </span>shell<span class="w"> </span>dpm<span class="w"> </span>set-profile-owner<span class="w"> </span>com.example.app/.DeviceAdminReceiver<span class="w"> </span>--user<span class="w"> </span><span class="m">10</span>
+</code></pre></div>
+
+<p><em>企业管理能力</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// DeviceOwner可以：</span>
+<span class="c1">// 1. 卸载任意应用</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">setUninstallBlocked</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span><span class="w"> </span><span class="n">packageName</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span>
+
+<span class="c1">// 2. 隐藏应用</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">setApplicationHidden</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span><span class="w"> </span><span class="n">packageName</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span>
+
+<span class="c1">// 3. 设置系统更新策略</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">setSystemUpdatePolicy</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span><span class="w"> </span><span class="n">SystemUpdatePolicy</span><span class="p">.</span><span class="na">createAutomaticInstallPolicy</span><span class="p">());</span>
+
+<span class="c1">// 4. 设置全局HTTP代理</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">setGlobalProxy</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span><span class="w"> </span><span class="n">proxyInfo</span><span class="p">);</span>
+
+<span class="c1">// 5. 禁用相机</span>
+<span class="n">dpm</span><span class="p">.</span><span class="na">setCameraDisabled</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>4. 通知监听权限</strong>：</p>
+<p><em>NotificationListenerService</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">&lt;service</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;.NotificationListener&quot;</span>
+<span class="w">    </span><span class="na">android:permission=</span><span class="s">&quot;android.permission.BIND_NOTIFICATION_LISTENER_SERVICE&quot;</span><span class="nt">&gt;</span>
+<span class="w">    </span><span class="nt">&lt;intent-filter&gt;</span>
+<span class="w">        </span><span class="nt">&lt;action</span><span class="w"> </span><span class="na">android:name=</span><span class="s">&quot;android.service.notification.NotificationListenerService&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/intent-filter&gt;</span>
+<span class="nt">&lt;/service&gt;</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">NotificationListener</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">NotificationListenerService</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onNotificationPosted</span><span class="p">(</span><span class="n">StatusBarNotification</span><span class="w"> </span><span class="n">sbn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 获取通知内容</span>
+<span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">packageName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sbn</span><span class="p">.</span><span class="na">getPackageName</span><span class="p">();</span>
+<span class="w">        </span><span class="n">CharSequence</span><span class="w"> </span><span class="n">title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sbn</span><span class="p">.</span><span class="na">getNotification</span><span class="p">().</span><span class="na">extras</span>
+<span class="w">            </span><span class="p">.</span><span class="na">getCharSequence</span><span class="p">(</span><span class="n">Notification</span><span class="p">.</span><span class="na">EXTRA_TITLE</span><span class="p">);</span>
+<span class="w">        </span><span class="n">CharSequence</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sbn</span><span class="p">.</span><span class="na">getNotification</span><span class="p">().</span><span class="na">extras</span>
+<span class="w">            </span><span class="p">.</span><span class="na">getCharSequence</span><span class="p">(</span><span class="n">Notification</span><span class="p">.</span><span class="na">EXTRA_TEXT</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onNotificationRemoved</span><span class="p">(</span><span class="n">StatusBarNotification</span><span class="w"> </span><span class="n">sbn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 通知被移除</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>5. VPN服务权限</strong>：</p>
+<p><em>VpnService</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">MyVpnService</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">VpnService</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">onStartCommand</span><span class="p">(</span><span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">flags</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">startId</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 配置VPN</span>
+<span class="w">        </span><span class="n">Builder</span><span class="w"> </span><span class="n">builder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Builder</span><span class="p">();</span>
+<span class="w">        </span><span class="n">builder</span><span class="p">.</span><span class="na">setSession</span><span class="p">(</span><span class="s">&quot;MyVPN&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">addAddress</span><span class="p">(</span><span class="s">&quot;10.0.0.2&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">24</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">addDnsServer</span><span class="p">(</span><span class="s">&quot;8.8.8.8&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">addRoute</span><span class="p">(</span><span class="s">&quot;0.0.0.0&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">setMtu</span><span class="p">(</span><span class="mi">1500</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 允许/禁止特定应用</span>
+<span class="w">        </span><span class="n">builder</span><span class="p">.</span><span class="na">addAllowedApplication</span><span class="p">(</span><span class="s">&quot;com.example.app&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">builder</span><span class="p">.</span><span class="na">addDisallowedApplication</span><span class="p">(</span><span class="s">&quot;com.example.blocked&quot;</span><span class="p">);</span>
+
+<span class="w">        </span><span class="n">ParcelFileDescriptor</span><span class="w"> </span><span class="kd">interface</span> <span class="err">=</span> <span class="nc">builder</span><span class="p">.</span><span class="na">establish</span><span class="p">();</span>
+<span class="w">        </span><span class="c1">// 处理VPN流量</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">START_STICKY</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>6. 特殊权限管理</strong>：</p>
+<p><em>权限查询API</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 获取所有特殊权限应用</span>
+<span class="n">PackageManager</span><span class="w"> </span><span class="n">pm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getPackageManager</span><span class="p">();</span>
+<span class="n">List</span><span class="o">&lt;</span><span class="n">PackageInfo</span><span class="o">&gt;</span><span class="w"> </span><span class="n">packages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pm</span><span class="p">.</span><span class="na">getPackagesHoldingPermissions</span><span class="p">(</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="o">[]</span><span class="p">{</span><span class="n">Manifest</span><span class="p">.</span><span class="na">permission</span><span class="p">.</span><span class="na">SYSTEM_ALERT_WINDOW</span><span class="p">},</span>
+<span class="w">    </span><span class="n">PackageManager</span><span class="p">.</span><span class="na">GET_PERMISSIONS</span><span class="p">);</span>
+
+<span class="c1">// 检查多个特殊权限</span>
+<span class="n">AppOpsManager</span><span class="w"> </span><span class="n">appOps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getSystemService</span><span class="p">(</span><span class="n">AppOpsManager</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">appOps</span><span class="p">.</span><span class="na">checkOpNoThrow</span><span class="p">(</span>
+<span class="w">    </span><span class="n">AppOpsManager</span><span class="p">.</span><span class="na">OPSTR_SYSTEM_ALERT_WINDOW</span><span class="p">,</span>
+<span class="w">    </span><span class="n">uid</span><span class="p">,</span><span class="w"> </span><span class="n">packageName</span><span class="p">);</span>
+<span class="kt">boolean</span><span class="w"> </span><span class="n">granted</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mode</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">AppOpsManager</span><span class="p">.</span><span class="na">MODE_ALLOWED</span><span class="p">;</span>
+</code></pre></div>
+
+<p><em>用户体验优化</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 提示用户为什么需要特殊权限</span>
+<span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">requestSpecialPermission</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">AlertDialog</span><span class="p">.</span><span class="na">Builder</span><span class="p">(</span><span class="k">this</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="na">setTitle</span><span class="p">(</span><span class="s">&quot;需要悬浮窗权限&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="na">setMessage</span><span class="p">(</span><span class="s">&quot;为了显示悬浮计时器，需要您授予悬浮窗权限&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="na">setPositiveButton</span><span class="p">(</span><span class="s">&quot;去设置&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">dialog</span><span class="p">,</span><span class="w"> </span><span class="n">which</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span>
+<span class="w">                </span><span class="n">Settings</span><span class="p">.</span><span class="na">ACTION_MANAGE_OVERLAY_PERMISSION</span><span class="p">,</span>
+<span class="w">                </span><span class="n">Uri</span><span class="p">.</span><span class="na">parse</span><span class="p">(</span><span class="s">&quot;package:&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">getPackageName</span><span class="p">()));</span>
+<span class="w">            </span><span class="n">startActivityForResult</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span><span class="w"> </span><span class="n">REQUEST_CODE</span><span class="p">);</span>
+<span class="w">        </span><span class="p">})</span>
+<span class="w">        </span><span class="p">.</span><span class="na">setNegativeButton</span><span class="p">(</span><span class="s">&quot;取消&quot;</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="na">show</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="133-selinux">13.3 SELinux策略</h2>
+<h3 id="1331-selinuxandroid">13.3.1 SELinux在Android中的实现</h3>
+<p>Android从4.3开始引入SELinux，5.0起全面启用enforcing模式：</p>
+<p><strong>核心概念</strong>：</p>
+<ul>
+<li>主体（Subject）：进程的安全上下文</li>
+<li>客体（Object）：文件、套接字等资源</li>
+<li>策略（Policy）：定义访问规则</li>
+</ul>
+<p><strong>Android特定实现</strong>：</p>
+<ul>
+<li>基于TE（Type Enforcement）的强制访问控制</li>
+<li>通过属性（attribute）简化策略管理</li>
+<li>分离平台策略和厂商策略（Project Treble）</li>
+</ul>
+<h3 id="1332">13.3.2 策略文件组织</h3>
+<p>SELinux策略分布在多个位置：</p>
+<div class="codehilite"><pre><span></span><code>/system/etc/selinux/         # 平台策略
+/vendor/etc/selinux/         # 厂商策略
+/odm/etc/selinux/           # ODM策略
+</code></pre></div>
+
+<p>关键策略文件：</p>
+<ul>
+<li>file_contexts：文件安全上下文映射</li>
+<li>property_contexts：属性上下文定义</li>
+<li>service_contexts：服务上下文映射</li>
+<li>seapp_contexts：应用进程上下文规则</li>
+</ul>
+<h3 id="1333">13.3.3 域转换与类型强制</h3>
+<p><strong>进程域转换</strong>：</p>
+<ul>
+<li>init进程根据init.rc中的<code>seclabel</code>设置域</li>
+<li>Zygote fork的应用进程通过seapp_contexts确定域</li>
+<li>通过<code>type_transition</code>规则实现自动域转换</li>
+</ul>
+<p><strong>文件类型强制</strong>：</p>
+<ul>
+<li>每个文件都有安全上下文（通过xattr存储）</li>
+<li>访问控制基于域和类型的allow规则</li>
+<li>neverallow规则防止策略违规</li>
+</ul>
+<h3 id="1334-trebleselinux">13.3.4 Treble与SELinux</h3>
+<p>Project Treble引入了更严格的SELinux边界：</p>
+<ol>
+<li>
+<p><strong>平台-厂商分离</strong>：
+   - 平台进程不能访问厂商文件类型
+   - 厂商进程通过HIDL/AIDL访问平台服务</p>
+</li>
+<li>
+<p><strong>属性隔离</strong>：
+   - vendor_属性仅供厂商代码使用
+   - 严格的属性访问控制</p>
+</li>
+<li>
+<p><strong>策略编译</strong>：
+   - 编译时合并多个策略源
+   - CIL（Common Intermediate Language）作为中间表示</p>
+</li>
+</ol>
+<h2 id="134-ios">13.4 与iOS沙箱对比</h2>
+<h3 id="1341">13.4.1 架构差异</h3>
+<p><strong>Android沙箱</strong>：</p>
+<ul>
+<li>基于Linux UID的进程隔离</li>
+<li>SELinux提供MAC（强制访问控制）</li>
+<li>相对开放的文件系统访问</li>
+</ul>
+<p><strong>iOS沙箱</strong>：</p>
+<ul>
+<li>基于BSD的Mandatory Access Control</li>
+<li>Seatbelt沙箱配置文件</li>
+<li>更严格的文件系统限制</li>
+</ul>
+<h3 id="1342">13.4.2 权限模型对比</h3>
+<p><strong>Android</strong>：</p>
+<ul>
+<li>细粒度的权限声明</li>
+<li>运行时权限请求</li>
+<li>权限组简化管理</li>
+</ul>
+<p><strong>iOS</strong>：</p>
+<ul>
+<li>更少的权限类型</li>
+<li>首次使用时请求</li>
+<li>隐私标签（Privacy Nutrition Labels）</li>
+</ul>
+<h3 id="1343">13.4.3 进程间通信安全</h3>
+<p><strong>Android Binder</strong>：</p>
+<ul>
+<li>UID/PID验证</li>
+<li>SELinux策略控制</li>
+<li>接口级别的权限检查</li>
+</ul>
+<p><strong>iOS XPC/Mach</strong>：</p>
+<ul>
+<li>Entitlements验证</li>
+<li>Mach端口权限</li>
+<li>更严格的IPC限制</li>
+</ul>
+<h3 id="1344">13.4.4 代码签名与完整性</h3>
+<p><strong>Android</strong>：</p>
+<ul>
+<li>APK签名验证（v1/v2/v3/v4）</li>
+<li>dm-verity确保系统分区完整性</li>
+<li>可选的应用完整性验证</li>
+</ul>
+<p><strong>iOS</strong>：</p>
+<ul>
+<li>强制代码签名</li>
+<li>运行时代码完整性检查</li>
+<li>更严格的动态代码限制</li>
+</ul>
+<h2 id="_1">本章小结</h2>
+<p>Android安全模型采用纵深防御策略，主要包括：</p>
+<ol>
+<li><strong>应用沙箱</strong>：基于Linux UID的进程隔离，配合文件权限和SELinux策略</li>
+<li><strong>权限系统</strong>：从安装时权限演进到运行时权限，提供细粒度的访问控制</li>
+<li><strong>SELinux</strong>：强制访问控制补充自主访问控制，Treble进一步加强了系统组件隔离</li>
+<li><strong>存储安全</strong>：Scoped Storage限制了应用对共享存储的访问</li>
+</ol>
+<p>与iOS相比，Android提供了更灵活但相对复杂的安全模型。理解这些机制对于开发安全的Android应用和进行安全研究至关重要。</p>
+<h2 id="_2">练习题</h2>
+<h3 id="_3">基础题</h3>
+<ol>
+<li><strong>UID分配机制</strong><br />
+   Android为每个应用分配UID的范围是什么？系统应用和普通应用的UID有何区别？<br />
+<strong>Hint</strong>: 查看Process.java中的UID常量定义</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   普通应用UID从10000开始（FIRST_APPLICATION_UID），系统核心服务使用0-9999范围。system进程使用UID 1000（SYSTEM_UID），root为0。共享UID的应用会使用相同的UID值。
+   </details>
+<ol start="2">
+<li><strong>权限级别识别</strong><br />
+   给定权限android.permission.CAMERA和android.permission.ACCESS_NETWORK_STATE，分别属于什么级别？这对用户授权有什么影响？<br />
+<strong>Hint</strong>: 考虑哪些权限需要运行时请求</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   CAMERA是dangerous权限，需要运行时请求用户授权；ACCESS_NETWORK_STATE是normal权限，安装时自动授予。dangerous权限涉及用户隐私或敏感功能，必须明确授权。
+   </details>
+<ol start="3">
+<li><strong>SELinux上下文理解</strong><br />
+   解释SELinux上下文u:r:untrusted_app:s0:c512,c768的含义，每部分代表什么？<br />
+<strong>Hint</strong>: user:role:type:sensitivity:categories</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   u=user（用户），r=role（角色），untrusted_app=type（域类型），s0=sensitivity（敏感度级别），c512,c768=categories（类别，用于MLS/MCS）。这是普通应用进程的典型安全上下文。
+   </details>
+<ol start="4">
+<li><strong>存储访问演进</strong><br />
+   列举Android 10 Scoped Storage相比传统存储模型的三个主要变化。<br />
+<strong>Hint</strong>: 考虑直接路径访问、权限需求和API变化</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   1) 应用不能直接访问外部存储任意路径 2) 访问媒体文件需通过MediaStore API 3) 访问其他应用文件需要通过Storage Access Framework。READ/WRITE_EXTERNAL_STORAGE权限作用大幅降低。
+   </details>
+<h3 id="_4">挑战题</h3>
+<ol start="5">
+<li><strong>沙箱逃逸分析</strong><br />
+   设计一个理论上的Android应用沙箱逃逸场景，需要绕过哪些安全机制？现代Android如何防御此类攻击？<br />
+<strong>Hint</strong>: 考虑多层防御体系</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   理论逃逸需要：1) 内核漏洞获取root 2) 绕过SELinux策略 3) 突破应用UID限制。防御措施：内核加固(KASLR/PXN/PAN)、SELinux enforcing模式、Verified Boot防止持久化、定期安全更新、exploit缓解机制（ASLR/DEP/CFI）。
+   </details>
+<ol start="6">
+<li><strong>权限提升路径</strong><br />
+   一个普通应用如何合法地获得系统级别的能力？分析至少两种不同的路径及其安全含义。<br />
+<strong>Hint</strong>: 考虑Android企业功能和辅助功能</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   合法路径：1) DeviceOwner/ProfileOwner通过企业部署获得管理权限 2) AccessibilityService获得UI控制能力 3) DeviceAdminReceiver获得设备管理权限 4) 成为默认应用（如Launcher/SMS）。每种都需要用户明确授权，且有审计机制。
+   </details>
+<ol start="7">
+<li><strong>SELinux策略设计</strong><br />
+   为一个需要访问摄像头硬件的自定义HAL服务设计SELinux策略，需要定义哪些规则？<br />
+<strong>Hint</strong>: 考虑文件访问、binder通信、属性访问</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   需要定义：1) 新的domain类型 2) 文件访问规则(allow domain camera_device:chr_file rw_file_perms) 3) binder通信规则与cameraserver 4) 属性读取权限 5) 设备节点标签 6) 域转换规则。遵循最小权限原则。
+   </details>
+<ol start="8">
+<li><strong>跨平台安全对比</strong><br />
+   分析Android的共享UID机制与iOS的App Group在安全性和功能性上的差异，哪种设计更优？<br />
+<strong>Hint</strong>: 考虑隔离性、灵活性和向后兼容性</li>
+</ol>
+<details markdown="block">
+   <summary markdown="off">答案</summary>
+
+   Android共享UID完全共享进程空间，安全边界模糊但灵活；iOS App Group仅共享特定数据，保持进程隔离。iOS设计更安全但受限，Android在Android 14后限制新应用使用共享UID，推荐使用content provider等IPC机制。
+   </details>
+<h2 id="_5">常见陷阱与错误</h2>
+<ol>
+<li>
+<p><strong>权限检查时机错误</strong>
+   - 错误：只在UI层检查权限
+   - 正确：在实际访问资源前进行权限检查，使用<code>ContextCompat.checkSelfPermission()</code></p>
+</li>
+<li>
+<p><strong>SELinux策略过度宽松</strong>
+   - 错误：使用permissive模式或过宽的allow规则
+   - 正确：遵循最小权限原则，使用audit2allow谨慎生成规则</p>
+</li>
+<li>
+<p><strong>忽视共享存储安全</strong>
+   - 错误：在外部存储保存敏感数据
+   - 正确：使用应用私有存储或加密敏感数据</p>
+</li>
+<li>
+<p><strong>不当的UID/PID验证</strong>
+   - 错误：仅依赖<code>Binder.getCallingUid()</code>而不清空调用身份
+   - 正确：使用<code>Binder.clearCallingIdentity()</code>确保正确的安全上下文</p>
+</li>
+<li>
+<p><strong>运行时权限请求不当</strong>
+   - 错误：一次请求所有权限或在应用启动时请求
+   - 正确：在需要时请求相关权限，提供清晰的使用说明</p>
+</li>
+</ol>
+<h2 id="_6">最佳实践检查清单</h2>
+<ul>
+<li>[ ] 应用是否遵循最小权限原则，只请求必要的权限？</li>
+<li>[ ] 是否正确处理运行时权限的各种状态（授予、拒绝、不再询问）？</li>
+<li>[ ] 敏感数据是否存储在应用私有目录而非共享存储？</li>
+<li>[ ] 是否为自定义系统组件编写了适当的SELinux策略？</li>
+<li>[ ] IPC接口是否实施了proper的调用者身份验证？</li>
+<li>[ ] 是否使用了Android提供的加密API保护敏感数据？</li>
+<li>[ ] 是否定期更新依赖库以修复已知安全漏洞？</li>
+<li>[ ] 是否在发布前进行了安全测试（如使用StrictMode）？</li>
+<li>[ ] 网络通信是否使用HTTPS并正确验证证书？</li>
+<li>[ ] 是否避免了动态加载代码等危险操作？</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="chapter12.html" class="nav-link prev">← 第12章：相机与多媒体框架</a><a href="chapter14.html" class="nav-link next">第14章：密钥管理与硬件安全 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

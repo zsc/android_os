@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="./">
+    <title>Android OS 深度原理解析</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/highlight.css">
+    <script src="assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors', 'ams']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors', '[tex]/ams']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="sidebar-search-input" placeholder="搜索..." autocomplete="off">
+            </div>
+            <div id="tree-container">
+                <nav class="tree-nav" role="tree">
+                    <div class="tree-item " >
+                        <a href="index.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter1.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第1章：Android系统架构概览</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter2.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第2章：Linux内核层定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter3.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第3章：硬件抽象层(HAL)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter4.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第4章：Init进程与系统启动</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter5.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第5章：Zygote与应用进程管理</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter6.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第6章：Android Runtime (ART)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter7.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第7章：Binder IPC机制深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter8.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第8章：系统服务架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter9.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第9章：ContentProvider与数据共享</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter10.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第10章：Android图形系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter11.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第11章：音频系统架构</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter12.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第12章：相机与多媒体框架</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter13.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第13章：Android安全模型</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter14.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第14章：密钥管理与硬件安全</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter15.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第15章：漏洞案例分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter16.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第16章：Neural Networks API (NNAPI)</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter17.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第17章：TensorFlow Lite集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter18.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第18章：ML Kit与设备端AI</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter19.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第19章：NPU/TPU硬件加速</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter20.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第20章：协处理器系统集成</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter21.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第21章：MIUI系统架构剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter22.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第22章：ColorOS/EMUI技术分析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter23.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第23章：厂商内核与驱动定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter24.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第24章：厂商AI能力对比</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter25.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第25章：OriginOS深度剖析</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter26.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第26章：Android虚拟化技术</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter27.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第27章：实时性与性能优化</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter28.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第28章：逆向工程与安全研究</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter29.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第29章：Android未来演进</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter30.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录A：调试工具与技巧</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter31.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">附录B：源码编译与定制</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="chapter32.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">第32章：参考资源</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item " >
+                        <a href="CLAUDE.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">AndroidOS原理教程项目说明</span>
+                        </a>
+                    </div>
+                
+                    <div class="tree-item active" >
+                        <a href="README.html" class="tree-link">
+                            <span class="tree-icon">📄</span>
+                            <span class="tree-title">Android OS 深度原理解析</span>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="android-os">Android OS 深度原理解析</h1>
+<p>本教程面向资深程序员和AI科学家，深入剖析Android操作系统的底层实现原理，并与Linux、iOS、鸿蒙等系统进行技术对比。</p>
+<h2 id="_1">第一部分：基础架构</h2>
+<h3 id="1android"><a href="chapter1.html">第1章：Android系统架构概览</a></h3>
+<ul>
+<li>Android架构层次剖析</li>
+<li>与Linux内核的关系</li>
+<li>与iOS/鸿蒙架构对比</li>
+<li>Android版本演进中的架构变化</li>
+</ul>
+<h3 id="2linux"><a href="chapter2.html">第2章：Linux内核层定制</a></h3>
+<ul>
+<li>Android特有的内核修改</li>
+<li>低内存管理器(LMK/LMKD)</li>
+<li>Binder驱动实现</li>
+<li>ION内存分配器</li>
+<li>与标准Linux内核的差异分析</li>
+</ul>
+<h3 id="3hal"><a href="chapter3.html">第3章：硬件抽象层(HAL)</a></h3>
+<ul>
+<li>HAL架构演进：Legacy HAL → HAL 2.0 → Project Treble</li>
+<li>HIDL/AIDL接口定义语言</li>
+<li>Vendor Interface与系统更新解耦</li>
+<li>与iOS驱动模型对比</li>
+</ul>
+<h2 id="_2">第二部分：进程与运行时</h2>
+<h3 id="4init"><a href="chapter4.html">第4章：Init进程与系统启动</a></h3>
+<ul>
+<li>Init进程源码分析</li>
+<li>RC脚本与系统属性</li>
+<li>SELinux策略加载</li>
+<li>早期启动优化技术</li>
+</ul>
+<h3 id="5zygote"><a href="chapter5.html">第5章：Zygote与应用进程管理</a></h3>
+<ul>
+<li>Zygote fork机制</li>
+<li>预加载资源与类</li>
+<li>App进程创建流程</li>
+<li>与iOS应用启动机制对比</li>
+</ul>
+<h3 id="6android-runtime-art"><a href="chapter6.html">第6章：Android Runtime (ART)</a></h3>
+<ul>
+<li>DEX文件格式与优化</li>
+<li>AOT/JIT编译策略</li>
+<li>垃圾回收机制</li>
+<li>与iOS运行时对比</li>
+</ul>
+<h2 id="ipc">第三部分：系统服务与IPC</h2>
+<h3 id="7binder-ipc"><a href="chapter7.html">第7章：Binder IPC机制深度剖析</a></h3>
+<ul>
+<li>Binder驱动实现原理</li>
+<li>ServiceManager角色</li>
+<li>AIDL代码生成机制</li>
+<li>与iOS XPC/Mach端口对比</li>
+</ul>
+<h3 id="8"><a href="chapter8.html">第8章：系统服务架构</a></h3>
+<ul>
+<li>SystemServer启动流程</li>
+<li>核心系统服务剖析</li>
+<li>服务生命周期管理</li>
+<li>跨进程回调机制</li>
+</ul>
+<h3 id="9contentprovider"><a href="chapter9.html">第9章：ContentProvider与数据共享</a></h3>
+<ul>
+<li>ContentProvider实现原理</li>
+<li>URI权限模型</li>
+<li>数据变更通知机制</li>
+<li>与iOS数据共享机制对比</li>
+</ul>
+<h2 id="_3">第四部分：图形与多媒体栈</h2>
+<h3 id="10android"><a href="chapter10.html">第10章：Android图形系统架构</a></h3>
+<ul>
+<li>SurfaceFlinger合成器</li>
+<li>Graphics HAL与Gralloc</li>
+<li>Vulkan/OpenGL ES集成</li>
+<li>与iOS Metal/Core Animation对比</li>
+</ul>
+<h3 id="11"><a href="chapter11.html">第11章：音频系统架构</a></h3>
+<ul>
+<li>AudioFlinger与AudioPolicyService</li>
+<li>Audio HAL接口</li>
+<li>音频路由与效果处理</li>
+<li>低延迟音频优化</li>
+</ul>
+<h3 id="12"><a href="chapter12.html">第12章：相机与多媒体框架</a></h3>
+<ul>
+<li>Camera HAL演进</li>
+<li>MediaCodec与OMX</li>
+<li>Stagefright架构</li>
+<li>与iOS AVFoundation对比</li>
+</ul>
+<h2 id="_4">第五部分：安全架构</h2>
+<h3 id="13android"><a href="chapter13.html">第13章：Android安全模型</a></h3>
+<ul>
+<li>应用沙箱机制</li>
+<li>权限系统演进</li>
+<li>SELinux策略</li>
+<li>与iOS沙箱对比</li>
+</ul>
+<h3 id="14"><a href="chapter14.html">第14章：密钥管理与硬件安全</a></h3>
+<ul>
+<li>Keystore系统</li>
+<li>Trusty TEE</li>
+<li>硬件密钥认证</li>
+<li>安全启动链</li>
+</ul>
+<h3 id="15"><a href="chapter15.html">第15章：漏洞案例分析</a></h3>
+<ul>
+<li>Stagefright漏洞剖析</li>
+<li>权限提升漏洞</li>
+<li>Binder漏洞利用</li>
+<li>防护机制演进</li>
+</ul>
+<h2 id="ai">第六部分：AI与协处理器集成</h2>
+<h3 id="16neural-networks-api-nnapi"><a href="chapter16.html">第16章：Neural Networks API (NNAPI)</a></h3>
+<ul>
+<li>NNAPI架构设计</li>
+<li>HAL接口与驱动集成</li>
+<li>模型编译与优化</li>
+<li>与iOS Core ML对比</li>
+</ul>
+<h3 id="17tensorflow-lite"><a href="chapter17.html">第17章：TensorFlow Lite集成</a></h3>
+<ul>
+<li>TFLite运行时架构</li>
+<li>GPU/NPU加速</li>
+<li>量化与优化技术</li>
+<li>设备端训练支持</li>
+</ul>
+<h3 id="18ml-kitai"><a href="chapter18.html">第18章：ML Kit与设备端AI</a></h3>
+<ul>
+<li>ML Kit架构剖析</li>
+<li>模型管理与更新</li>
+<li>隐私保护机制</li>
+<li>联邦学习集成</li>
+</ul>
+<h3 id="19nputpu"><a href="chapter19.html">第19章：NPU/TPU硬件加速</a></h3>
+<ul>
+<li>高通Hexagon DSP</li>
+<li>联发科APU</li>
+<li>Google Tensor架构</li>
+<li>与Apple Neural Engine对比</li>
+</ul>
+<h3 id="20"><a href="chapter20.html">第20章：协处理器系统集成</a></h3>
+<ul>
+<li>DSP音频处理</li>
+<li>ISP图像处理管线</li>
+<li>基带处理器接口</li>
+<li>Sensor Hub架构</li>
+</ul>
+<h2 id="_5">第七部分：中国厂商定制分析</h2>
+<h3 id="21miui"><a href="chapter21.html">第21章：MIUI系统架构剖析</a></h3>
+<ul>
+<li>MIUI框架修改</li>
+<li>小爱同学AI集成</li>
+<li>安全与隐私增强</li>
+<li>性能优化技术</li>
+</ul>
+<h3 id="22colorosemui"><a href="chapter22.html">第22章：ColorOS/EMUI技术分析</a></h3>
+<ul>
+<li>系统UI重构</li>
+<li>AI调度优化</li>
+<li>跨设备协同</li>
+<li>自研组件替换</li>
+</ul>
+<h3 id="23"><a href="chapter23.html">第23章：厂商内核与驱动定制</a></h3>
+<ul>
+<li>内核调度器修改</li>
+<li>内存管理优化</li>
+<li>功耗控制策略</li>
+<li>快充协议实现</li>
+</ul>
+<h3 id="24ai"><a href="chapter24.html">第24章：厂商AI能力对比</a></h3>
+<ul>
+<li>语音助手架构</li>
+<li>计算摄影算法</li>
+<li>系统级AI调度</li>
+<li>隐私计算实现</li>
+</ul>
+<h3 id="25originos"><a href="chapter25.html">第25章：OriginOS深度剖析</a></h3>
+<ul>
+<li>OriginOS设计理念与架构革新</li>
+<li>原子组件系统实现</li>
+<li>Multi-Turbo性能优化技术</li>
+<li>Jovi AI引擎集成</li>
+<li>内存融合与存储优化</li>
+</ul>
+<h2 id="_6">第八部分：高级主题</h2>
+<h3 id="26android"><a href="chapter26.html">第26章：Android虚拟化技术</a></h3>
+<ul>
+<li>容器化技术应用</li>
+<li>多用户与工作资料</li>
+<li>虚拟化安全增强</li>
+<li>与iOS虚拟化对比</li>
+</ul>
+<h3 id="27"><a href="chapter27.html">第27章：实时性与性能优化</a></h3>
+<ul>
+<li>RT调度器应用</li>
+<li>Jank检测与优化</li>
+<li>内存压力处理</li>
+<li>功耗优化策略</li>
+</ul>
+<h3 id="28"><a href="chapter28.html">第28章：逆向工程与安全研究</a></h3>
+<ul>
+<li>APK逆向技术</li>
+<li>系统调试方法</li>
+<li>Fuzzing测试</li>
+<li>漏洞挖掘技术</li>
+</ul>
+<h3 id="29android"><a href="chapter29.html">第29章：Android未来演进</a></h3>
+<ul>
+<li>Fuchsia OS展望</li>
+<li>模块化系统更新</li>
+<li>AI First设计理念</li>
+<li>与鸿蒙OS竞争分析</li>
+</ul>
+<h2 id="_7">附录</h2>
+<h3 id="a"><a href="chapter30.html">附录A：调试工具与技巧</a></h3>
+<ul>
+<li>ADB高级用法</li>
+<li>Systrace性能分析</li>
+<li>内核调试方法</li>
+<li>逆向工具链</li>
+</ul>
+<h3 id="b"><a href="chapter31.html">附录B：源码编译与定制</a></h3>
+<ul>
+<li>AOSP编译环境</li>
+<li>设备树配置</li>
+<li>HAL开发指南</li>
+<li>系统签名与发布</li>
+</ul>
+<h3 id="c"><a href="chapter32.html">附录C：参考资源</a></h3>
+<ul>
+<li>官方文档索引</li>
+<li>开源项目推荐</li>
+<li>安全公告追踪</li>
+<li>社区资源汇总</li>
+</ul>
+<hr />
+<h2 id="_8">使用说明</h2>
+<ol>
+<li>本教程假设读者具有扎实的操作系统原理基础和编程经验</li>
+<li>建议按照章节顺序学习，每章都包含练习题和参考答案</li>
+<li>代码示例仅用于说明原理，不包含完整实现</li>
+<li>重点关注架构设计和实现原理，而非API使用</li>
+</ol>
+<h2 id="_9">更新日志</h2>
+<ul>
+<li>2024.01：初版发布，覆盖Android 14</li>
+<li>持续更新中...</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="CLAUDE.html" class="nav-link prev">← AndroidOS原理教程项目说明</a></nav>
+        </main>
+    </div>
+</body>
+</html>
