@@ -302,52 +302,152 @@
 <div class="codehilite"><pre><span></span><code><span class="n">kernel_init</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">run_init_process</span><span class="p">(</span><span class="s">&quot;/init&quot;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">execve</span><span class="p">(</span><span class="s">&quot;/init&quot;</span><span class="p">)</span>
 </code></pre></div>
 
+<p>内核在<code>kernel_init()</code>函数中按以下顺序尝试启动init：</p>
+<ol>
+<li><code>ramdisk_execute_command</code>（通常是<code>/init</code>）</li>
+<li><code>/sbin/init</code></li>
+<li><code>/etc/init</code></li>
+<li><code>/bin/init</code></li>
+<li><code>/bin/sh</code>（紧急模式）</li>
+</ol>
+<p>Android将init放在ramdisk根目录，确保第一个被找到。内核传递的环境变量极其有限：</p>
+<ul>
+<li><code>HOME=/</code></li>
+<li><code>TERM=linux</code></li>
+<li><code>PATH=/sbin:/usr/sbin:/bin:/usr/bin</code></li>
+</ul>
 <p>Init进程的生命周期分为两个阶段：</p>
-<p><strong>First Stage Init</strong></p>
+<p><strong>First Stage Init</strong>
+First Stage Init在ramdisk环境中运行，使用静态链接的最小化二进制文件，主要任务是准备真正的根文件系统：</p>
 <ul>
 <li>挂载基础文件系统（/dev、/proc、/sys等）</li>
 <li>使用<code>mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755")</code></li>
 <li>创建必要的子目录：/dev/pts、/dev/socket、/dev/dm-user</li>
-<li>创建设备节点</li>
+<li>挂载<code>mount("devpts", "/dev/pts", "devpts", 0, NULL)</code>支持伪终端</li>
+<li>挂载<code>mount("proc", "/proc", "proc", 0, "hidepid=2")</code>增强安全性</li>
+<li>
+<p>挂载<code>mount("sysfs", "/sys", "sysfs", 0, NULL)</code>导出内核对象</p>
+</li>
+<li>
+<p>创建设备节点</p>
+</li>
 <li><code>/dev/null</code>、<code>/dev/zero</code>、<code>/dev/full</code>等基础设备</li>
-<li><code>/dev/kmsg</code>用于内核日志</li>
-<li><code>/dev/random</code>、<code>/dev/urandom</code>用于随机数</li>
-<li>初始化内核日志</li>
+<li><code>/dev/kmsg</code>用于内核日志（主设备号1，次设备号11）</li>
+<li><code>/dev/random</code>、<code>/dev/urandom</code>用于随机数（主设备号1，次设备号8/9）</li>
+<li><code>/dev/ptmx</code>伪终端主设备（主设备号5，次设备号2）</li>
+<li>
+<p>使用<code>mknod()</code>系统调用创建，设置权限0666或0600</p>
+</li>
+<li>
+<p>初始化内核日志</p>
+</li>
 <li>通过<code>android::base::InitLogging()</code>设置日志系统</li>
 <li>重定向stdout/stderr到<code>/dev/kmsg</code></li>
-<li>加载SELinux策略（如果是强制模式）</li>
+<li>设置日志级别和格式（时间戳、进程信息等）</li>
+<li>
+<p>配置klog过滤规则，避免日志风暴</p>
+</li>
+<li>
+<p>挂载必要的块设备</p>
+</li>
+<li>解析设备树（device tree）获取分区信息</li>
+<li>等待块设备就绪（通过uevent监听）</li>
+<li>挂载system分区到<code>/system</code>（只读）</li>
+<li>挂载vendor分区到<code>/vendor</code>（只读）</li>
+<li>
+<p>处理A/B分区的slot选择</p>
+</li>
+<li>
+<p>加载SELinux策略（如果是强制模式）</p>
+</li>
 <li>调用<code>SelinuxInitialize()</code>加载编译后的策略</li>
 <li>设置进程上下文为<code>u:r:init:s0</code></li>
-<li>执行Second Stage Init</li>
+<li>从<code>/system/etc/selinux/plat_sepolicy.cil</code>加载平台策略</li>
+<li>合并<code>/vendor/etc/selinux/vendor_sepolicy.cil</code>厂商策略</li>
+<li>
+<p>通过<code>selinux_android_load_policy()</code>加载到内核</p>
+</li>
+<li>
+<p>执行Second Stage Init</p>
+</li>
 <li>通过<code>execv("/system/bin/init", argv)</code>重新执行自身</li>
 <li>传递<code>--second-stage</code>参数标识</li>
+<li>保留必要的文件描述符（如<code>/dev/kmsg</code>）</li>
 </ul>
-<p><strong>Second Stage Init</strong></p>
+<p><strong>Second Stage Init</strong>
+Second Stage Init从真正的系统分区运行，拥有完整的库支持和更丰富的功能：</p>
 <ul>
 <li>初始化属性服务（Property Service）</li>
-<li>创建属性共享内存区域</li>
-<li>启动Unix域套接字监听属性设置请求</li>
-<li>加载默认属性文件（default.prop、build.prop等）</li>
-<li>解析RC脚本</li>
-<li>从<code>/system/etc/init/</code>、<code>/vendor/etc/init/</code>等目录加载</li>
+<li>创建属性共享内存区域（<code>/dev/__properties__</code>）</li>
+<li>初始化属性区域头部，设置魔数和版本号</li>
+<li>启动Unix域套接字监听属性设置请求（<code>/dev/socket/property_service</code>）</li>
+<li>加载默认属性文件：<ul>
+<li><code>/default.prop</code>（ramdisk中的属性）</li>
+<li><code>/system/build.prop</code>（系统属性）</li>
+<li><code>/vendor/build.prop</code>（厂商属性）</li>
+<li><code>/product/build.prop</code>（产品属性）</li>
+<li><code>/odm/build.prop</code>（ODM属性）</li>
+</ul>
+</li>
+<li>
+<p>设置属性区域的SELinux标签和访问权限</p>
+</li>
+<li>
+<p>解析RC脚本</p>
+</li>
+<li>从以下目录按顺序加载RC文件：<ul>
+<li><code>/init.rc</code>（主配置文件）</li>
+<li><code>/system/etc/init/</code>（系统服务）</li>
+<li><code>/vendor/etc/init/</code>（厂商服务）</li>
+<li><code>/odm/etc/init/</code>（ODM服务）</li>
+</ul>
+</li>
 <li>构建Action和Service的内部数据结构</li>
 <li>验证语法正确性和权限要求</li>
-<li>启动系统服务</li>
+<li>检查服务的可执行文件是否存在</li>
+<li>
+<p>预处理import语句，支持属性值替换</p>
+</li>
+<li>
+<p>初始化子系统</p>
+</li>
+<li>启动ueventd处理设备事件（软链接到init）</li>
+<li>启动watchdogd防止系统挂起（如果硬件支持）</li>
+<li>创建控制消息处理器（<code>/dev/socket/init</code>）</li>
+<li>
+<p>注册信号处理器（SIGCHLD、SIGTERM等）</p>
+</li>
+<li>
+<p>启动系统服务</p>
+</li>
 <li>根据class和触发器有序启动</li>
 <li>设置进程的capabilities、优先级、cgroup等</li>
-<li>进入主事件循环</li>
+<li>配置OOM调整值保护关键服务</li>
+<li>
+<p>设置进程的namespace隔离（如果配置）</p>
+</li>
+<li>
+<p>进入主事件循环</p>
+</li>
 <li>基于epoll的事件驱动模型</li>
 <li>处理属性变化、子进程退出、控制消息等</li>
+<li>执行pending的Action队列</li>
+<li>监控服务健康状态，必要时重启</li>
 </ul>
 <p><strong>关键环境变量设置</strong></p>
-<div class="codehilite"><pre><span></span><code>PATH=/system/bin:/system/xbin:/vendor/bin
-LD_LIBRARY_PATH=/system/lib64:/vendor/lib64
+<div class="codehilite"><pre><span></span><code>PATH=/system/bin:/system/xbin:/vendor/bin:/odm/bin
+LD_LIBRARY_PATH=/system/lib64:/vendor/lib64:/odm/lib64
 ANDROID_ROOT=/system
 ANDROID_DATA=/data
+ANDROID_STORAGE=/storage
+ANDROID_RUNTIME_ROOT=/apex/com.android.runtime
+ANDROID_TZDATA_ROOT=/apex/com.android.tzdata
+ANDROID_ART_ROOT=/apex/com.android.art
+BOOTCLASSPATH=/apex/com.android.runtime/javalib/core-oj.jar:...
 </code></pre></div>
 
 <h3 id="412">4.1.2 关键数据结构</h3>
-<p>Init进程使用三个核心数据结构管理系统启动：</p>
+<p>Init进程使用精心设计的数据结构管理系统启动，这些结构体现了Android对启动过程的细粒度控制：</p>
 <p><strong>Action（动作）</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">Action</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">name</span><span class="p">;</span>
@@ -361,14 +461,28 @@ ANDROID_DATA=/data
 <span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">current_command</span><span class="p">;</span>
 <span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="nf">ExecuteOneCommand</span><span class="p">();</span>
 <span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="nf">CheckPropertyTriggers</span><span class="p">();</span>
+
+<span class="w">    </span><span class="c1">// 触发器管理</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">required_property_contexts</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="nf">TriggersEqual</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">Action</span><span class="o">&amp;</span><span class="w"> </span><span class="n">other</span><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1">// 执行控制</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">steady_clock</span><span class="o">::</span><span class="n">time_point</span><span class="w"> </span><span class="n">last_command_time</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="o">&gt;</span><span class="w"> </span><span class="n">command_timeout</span><span class="p">;</span>
 <span class="p">}</span>
 </code></pre></div>
 
-<p>Action代表一组命令的集合，可以被触发器（Trigger）激活执行。每个Action可以包含多个命令，按顺序执行。</p>
+<p>Action的关键特性：</p>
+<ul>
+<li><strong>触发器类型</strong>：事件触发器（如<code>boot</code>）或属性触发器（如<code>property:sys.boot_completed=1</code>）</li>
+<li><strong>命令队列</strong>：支持异步执行，每次循环只执行一个命令，避免阻塞</li>
+<li><strong>优先级控制</strong>：相同触发器的Action按解析顺序执行</li>
+<li><strong>一次性执行</strong>：<code>oneshot</code>标记的Action只执行一次</li>
+</ul>
 <p><strong>Service（服务）</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">Service</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">name</span><span class="p">;</span>
-<span class="w">    </span><span class="kt">unsigned</span><span class="w"> </span><span class="n">flags</span><span class="p">;</span><span class="w">  </span><span class="c1">// SVC_RUNNING, SVC_DISABLED等</span>
+<span class="w">    </span><span class="kt">unsigned</span><span class="w"> </span><span class="n">flags</span><span class="p">;</span><span class="w">  </span><span class="c1">// SVC_RUNNING, SVC_DISABLED, SVC_RESTARTING等</span>
 <span class="w">    </span><span class="kt">pid_t</span><span class="w"> </span><span class="n">pid</span><span class="p">;</span>
 <span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">args</span><span class="p">;</span>
 <span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">Option</span><span class="o">&gt;</span><span class="w"> </span><span class="n">options</span><span class="p">;</span>
@@ -377,22 +491,48 @@ ANDROID_DATA=/data
 <span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">crash_count</span><span class="p">;</span>
 <span class="w">    </span><span class="kt">time_t</span><span class="w"> </span><span class="n">time_started</span><span class="p">;</span>
 <span class="w">    </span><span class="kt">time_t</span><span class="w"> </span><span class="n">time_crashed</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">seconds</span><span class="w"> </span><span class="n">restart_period</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="n">s</span><span class="p">;</span><span class="w">  </span><span class="c1">// 重启间隔</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">seconds</span><span class="o">&gt;</span><span class="w"> </span><span class="n">timeout_period</span><span class="p">;</span><span class="w">  </span><span class="c1">// 启动超时</span>
 
-<span class="w">    </span><span class="c1">// 资源限制</span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">rlimit</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">rlimits</span><span class="p">;</span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">writepid_files</span><span class="p">;</span>
+<span class="w">    </span><span class="c1">// 进程管理</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">console</span><span class="p">;</span><span class="w">  </span><span class="c1">// 控制台设备</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="w"> </span><span class="n">sigstop</span><span class="p">;</span><span class="w">  </span><span class="c1">// 启动后是否暂停</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">rlimit</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">rlimits</span><span class="p">;</span><span class="w">  </span><span class="c1">// 资源限制</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">writepid_files</span><span class="p">;</span><span class="w">  </span><span class="c1">// PID文件路径</span>
 
 <span class="w">    </span><span class="c1">// 安全上下文</span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">seclabel</span><span class="p">;</span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">uid_t</span><span class="o">&gt;</span><span class="w"> </span><span class="n">supp_gids</span><span class="p">;</span>
-<span class="w">    </span><span class="n">CapSet</span><span class="w"> </span><span class="n">capabilities</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">seclabel</span><span class="p">;</span><span class="w">  </span><span class="c1">// SELinux标签</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">uid_t</span><span class="o">&gt;</span><span class="w"> </span><span class="n">supp_gids</span><span class="p">;</span><span class="w">  </span><span class="c1">// 补充组ID</span>
+<span class="w">    </span><span class="n">CapSet</span><span class="w"> </span><span class="n">capabilities</span><span class="p">;</span><span class="w">  </span><span class="c1">// Linux capabilities</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">updatable</span><span class="p">;</span><span class="w">  </span><span class="c1">// APEX更新</span>
 
 <span class="w">    </span><span class="c1">// 命名空间隔离</span>
 <span class="w">    </span><span class="kt">unsigned</span><span class="w"> </span><span class="n">namespace_flags</span><span class="p">;</span><span class="w">  </span><span class="c1">// CLONE_NEWPID, CLONE_NEWNET等</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">namespaces_to_enter</span><span class="p">;</span><span class="w">  </span><span class="c1">// 进入已存在的namespace</span>
+
+<span class="w">    </span><span class="c1">// cgroup和调度</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">cgroup_paths</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">oom_score_adjust</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">-1000</span><span class="p">;</span><span class="w">  </span><span class="c1">// OOM killer调整值</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">priority</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w">  </span><span class="c1">// nice值</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">sched_param</span><span class="w"> </span><span class="n">scheduling_param</span><span class="p">;</span><span class="w">  </span><span class="c1">// 实时调度参数</span>
+
+<span class="w">    </span><span class="c1">// 服务依赖</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">before_services</span><span class="p">;</span><span class="w">  </span><span class="c1">// 必须在这些服务前启动</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">after_services</span><span class="p">;</span><span class="w">   </span><span class="c1">// 必须在这些服务后启动</span>
+
+<span class="w">    </span><span class="c1">// 关键服务处理</span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">is_critical</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span><span class="w">  </span><span class="c1">// 崩溃是否触发重启</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">critical_services_to_restart</span><span class="p">;</span>
 <span class="p">}</span>
 </code></pre></div>
 
-<p>Service代表需要启动和管理的守护进程，包含完整的进程管理信息。</p>
+<p>Service的高级特性：</p>
+<ul>
+<li><strong>生命周期管理</strong>：自动重启、崩溃计数、退避算法</li>
+<li><strong>资源隔离</strong>：支持Linux namespace、cgroup、capabilities</li>
+<li><strong>依赖关系</strong>：服务间的启动顺序依赖</li>
+<li><strong>更新支持</strong>：与APEX模块系统集成</li>
+</ul>
 <p><strong>Property（属性）</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="c1">// 属性存储结构</span>
 <span class="k">struct</span><span class="w"> </span><span class="nc">prop_info</span><span class="w"> </span><span class="p">{</span>
@@ -404,61 +544,208 @@ ANDROID_DATA=/data
 <span class="c1">// 属性区域管理</span>
 <span class="k">struct</span><span class="w"> </span><span class="nc">prop_area</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">bytes_used</span><span class="p">;</span>
-<span class="w">    </span><span class="kt">atomic_uint_least32_t</span><span class="w"> </span><span class="n">serial</span><span class="p">;</span>
-<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">magic</span><span class="p">;</span>
-<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">version</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">atomic_uint_least32_t</span><span class="w"> </span><span class="n">serial</span><span class="p">;</span><span class="w">  </span><span class="c1">// 全局版本号</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">magic</span><span class="p">;</span><span class="w">  </span><span class="c1">// 0x504f5250 (&#39;PROP&#39;)</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">version</span><span class="p">;</span><span class="w">  </span><span class="c1">// 当前版本号</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">reserved</span><span class="p">[</span><span class="mi">4</span><span class="p">];</span>
 <span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w">  </span><span class="c1">// 实际属性数据</span>
+<span class="p">};</span>
+
+<span class="c1">// 属性节点（Trie树结构）</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">prop_bt</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">namelen</span><span class="p">;</span><span class="w">  </span><span class="c1">// 名称长度</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">proplen</span><span class="p">;</span><span class="w">  </span><span class="c1">// 属性数量</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">children</span><span class="p">;</span><span class="w">  </span><span class="c1">// 子节点偏移</span>
+<span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">props</span><span class="p">;</span><span class="w">  </span><span class="c1">// 属性列表偏移</span>
+<span class="w">    </span><span class="kt">char</span><span class="w"> </span><span class="n">name</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w">  </span><span class="c1">// 节点名称</span>
+<span class="p">};</span>
+
+<span class="c1">// 属性上下文映射</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">prop_context</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="o">*</span><span class="w"> </span><span class="n">name_prefix</span><span class="p">;</span><span class="w">  </span><span class="c1">// 属性前缀</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">char</span><span class="o">*</span><span class="w"> </span><span class="n">context</span><span class="p">;</span><span class="w">  </span><span class="c1">// SELinux上下文</span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">exact_match</span><span class="p">;</span><span class="w">  </span><span class="c1">// 是否精确匹配</span>
 <span class="p">};</span>
 </code></pre></div>
 
-<p>系统属性采用共享内存实现，通过<code>property_service.cpp</code>管理，提供跨进程的配置共享机制。属性存储在多个内存区域中，按前缀分组以提高查找效率。</p>
+<p>系统属性的高级特性：</p>
+<ul>
+<li><strong>共享内存实现</strong>：通过<code>mmap</code>映射到所有进程，零拷贝访问</li>
+<li><strong>Trie树索引</strong>：支持前缀查询和通配符匹配</li>
+<li><strong>版本控制</strong>：通过<code>serial</code>字段检测属性变化，避免轮询</li>
+<li><strong>分区存储</strong>：不同前缀的属性存储在独立的内存区域</li>
+<li><strong>访问控制</strong>：结合SELinux和UID权限进行细粒度控制</li>
+</ul>
 <p><strong>命令管理器（CommandManager）</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BuiltinFunctionMap</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">,</span><span class="w"> </span><span class="n">BuiltinFunction</span><span class="o">&gt;</span><span class="w"> </span><span class="n">functions_</span><span class="p">;</span>
 
 <span class="w">    </span><span class="c1">// 注册的内置命令</span>
 <span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="nf">RegisterBuiltinFunctions</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 文件系统操作</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;chmod&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_chmod</span><span class="p">);</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;chown&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_chown</span><span class="p">);</span>
-<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;class_start&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_class_start</span><span class="p">);</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;copy&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_copy</span><span class="p">);</span>
-<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;exec&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_exec</span><span class="p">);</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;mkdir&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_mkdir</span><span class="p">);</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;mount&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_mount</span><span class="p">);</span>
-<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;setprop&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_setprop</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;umount&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_umount</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;symlink&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_symlink</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;rm&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_rm</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;rmdir&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_rmdir</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;write&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_write</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 服务控制</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;class_start&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_class_start</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;class_stop&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_class_stop</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;class_reset&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_class_reset</span><span class="p">);</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;start&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_start</span><span class="p">);</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;stop&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_stop</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;restart&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_restart</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;enable&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_enable</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 属性操作</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;setprop&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_setprop</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;getprop&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_getprop</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;wait_for_prop&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_wait_for_prop</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 进程执行</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;exec&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_exec</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;exec_start&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_exec_start</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;exec_background&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_exec_background</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 触发器管理</span>
 <span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;trigger&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_trigger</span><span class="p">);</span>
-<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;write&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_write</span><span class="p">);</span>
-<span class="w">        </span><span class="c1">// ... 更多命令</span>
+
+<span class="w">        </span><span class="c1">// 系统控制</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;bootchart&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_bootchart</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;init_user0&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_init_user0</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;installkey&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_installkey</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;load_persist_props&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_load_persist_props</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 网络配置</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;hostname&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_hostname</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;domainname&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_domainname</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;ifup&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_ifup</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 安全相关</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;restorecon&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_restorecon</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;restorecon_recursive&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_restorecon_recursive</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;setrlimit&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_setrlimit</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;swapon_all&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_swapon_all</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 日志和调试</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;loglevel&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_loglevel</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Register</span><span class="p">(</span><span class="s">&quot;mark_post_data&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">do_mark_post_data</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 命令执行包装</span>
+<span class="w">    </span><span class="n">Result</span><span class="o">&lt;</span><span class="n">Success</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Execute</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span>
+<span class="w">                           </span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">auto</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">functions_</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">it</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">functions_</span><span class="p">.</span><span class="n">end</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">Error</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Unknown command: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">name</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">it</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">(</span><span class="n">args</span><span class="p">);</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">};</span>
 </code></pre></div>
 
-<h3 id="413">4.1.3 事件循环机制</h3>
-<p>Init进程的主循环基于epoll实现，监听以下事件：</p>
+<p>命令系统的设计特点：</p>
 <ul>
-<li>属性设置请求（通过Unix域套接字）</li>
-<li>子进程退出信号（SIGCHLD）</li>
-<li>其他进程的控制命令</li>
-<li>内核消息（通过netlink套接字）</li>
+<li><strong>模块化设计</strong>：每个命令是独立的函数，易于扩展</li>
+<li><strong>错误处理</strong>：使用<code>Result&lt;T&gt;</code>类型安全地返回错误</li>
+<li><strong>参数验证</strong>：每个命令函数负责验证自己的参数</li>
+<li><strong>异步支持</strong>：<code>exec_background</code>等命令支持非阻塞执行</li>
 </ul>
-<p><strong>Epoll事件源注册</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">Epoll::Open</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="n">epoll_fd_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">epoll_create1</span><span class="p">(</span><span class="n">EPOLL_CLOEXEC</span><span class="p">);</span>
+<h3 id="413">4.1.3 事件循环机制</h3>
+<p>Init进程的主循环采用高效的epoll机制，这是Android系统响应性的基础。与传统的select/poll相比，epoll在大量文件描述符场景下性能更优：</p>
+<p><strong>事件源类型</strong>
+Init进程监听的事件源包括：</p>
+<ul>
+<li>属性设置请求（通过Unix域套接字<code>/dev/socket/property_service</code>）</li>
+<li>子进程退出信号（通过signalfd将SIGCHLD转换为文件描述符事件）</li>
+<li>控制命令（通过<code>/dev/socket/init</code>接收如<code>ctl.start</code>等命令）</li>
+<li>内核消息（通过netlink套接字接收uevent等）</li>
+<li>看门狗定时器（防止init进程挂起）</li>
+<li>keychord事件（组合键触发特殊动作）</li>
+</ul>
+<p><strong>Epoll架构实现</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Epoll</span><span class="w"> </span><span class="p">{</span>
+<span class="k">private</span><span class="o">:</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">epoll_fd_</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">map</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">handlers_</span><span class="p">;</span>
 
-<span class="w">    </span><span class="c1">// 注册信号处理</span>
-<span class="w">    </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">signal_fd</span><span class="p">,</span><span class="w"> </span><span class="n">HandleSignals</span><span class="p">);</span>
+<span class="k">public</span><span class="o">:</span>
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="n">Open</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 创建epoll实例，EPOLL_CLOEXEC防止fd泄露到子进程</span>
+<span class="w">        </span><span class="n">epoll_fd_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">epoll_create1</span><span class="p">(</span><span class="n">EPOLL_CLOEXEC</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">epoll_fd_</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">-1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">PLOG</span><span class="p">(</span><span class="n">FATAL</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;epoll_create1 failed&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
 
-<span class="w">    </span><span class="c1">// 注册属性服务</span>
-<span class="w">    </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">property_fd</span><span class="p">,</span><span class="w"> </span><span class="n">HandlePropertySet</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">// 注册信号处理（使用signalfd）</span>
+<span class="w">        </span><span class="kt">sigset_t</span><span class="w"> </span><span class="n">mask</span><span class="p">;</span>
+<span class="w">        </span><span class="n">sigemptyset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mask</span><span class="p">);</span>
+<span class="w">        </span><span class="n">sigaddset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mask</span><span class="p">,</span><span class="w"> </span><span class="n">SIGCHLD</span><span class="p">);</span>
+<span class="w">        </span><span class="n">sigaddset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mask</span><span class="p">,</span><span class="w"> </span><span class="n">SIGTERM</span><span class="p">);</span>
+<span class="w">        </span><span class="n">signal_fd_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">signalfd</span><span class="p">(</span><span class="mi">-1</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">mask</span><span class="p">,</span><span class="w"> </span><span class="n">SFD_CLOEXEC</span><span class="p">);</span>
+<span class="w">        </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">signal_fd_</span><span class="p">,</span><span class="w"> </span><span class="n">HandleSignals</span><span class="p">);</span>
 
-<span class="w">    </span><span class="c1">// 注册控制消息</span>
-<span class="w">    </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">init_fd</span><span class="p">,</span><span class="w"> </span><span class="n">HandleInitSocket</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">// 注册属性服务</span>
+<span class="w">        </span><span class="n">property_fd_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CreatePropertySocket</span><span class="p">();</span>
+<span class="w">        </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">property_fd_</span><span class="p">,</span><span class="w"> </span><span class="n">HandlePropertySet</span><span class="p">);</span>
 
-<span class="w">    </span><span class="c1">// 注册子进程监控</span>
-<span class="w">    </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">sigchld_fd</span><span class="p">,</span><span class="w"> </span><span class="n">HandleSigchld</span><span class="p">);</span>
-<span class="p">}</span>
+<span class="w">        </span><span class="c1">// 注册控制消息</span>
+<span class="w">        </span><span class="n">init_fd_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CreateInitSocket</span><span class="p">();</span>
+<span class="w">        </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">init_fd_</span><span class="p">,</span><span class="w"> </span><span class="n">HandleInitSocket</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 注册keychord（组合键）</span>
+<span class="w">        </span><span class="n">keychord_fd_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">OpenKeychordDevice</span><span class="p">();</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">keychord_fd_</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="n">keychord_fd_</span><span class="p">,</span><span class="w"> </span><span class="n">HandleKeychord</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="n">RegisterHandler</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="n">handler</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">epoll_event</span><span class="w"> </span><span class="n">ev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{};</span>
+<span class="w">        </span><span class="n">ev</span><span class="p">.</span><span class="n">events</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EPOLLIN</span><span class="p">;</span><span class="w">  </span><span class="c1">// 监听可读事件</span>
+<span class="w">        </span><span class="n">ev</span><span class="p">.</span><span class="n">data</span><span class="p">.</span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fd</span><span class="p">;</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">epoll_ctl</span><span class="p">(</span><span class="n">epoll_fd_</span><span class="p">,</span><span class="w"> </span><span class="n">EPOLL_CTL_ADD</span><span class="p">,</span><span class="w"> </span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">ev</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">-1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">PLOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Failed to add fd &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">fd</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot; to epoll&quot;</span><span class="p">;</span>
+<span class="w">            </span><span class="k">return</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="n">handlers_</span><span class="p">[</span><span class="n">fd</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">move</span><span class="p">(</span><span class="n">handler</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">Wait</span><span class="p">(</span>
+<span class="w">            </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">milliseconds</span><span class="o">&gt;</span><span class="w"> </span><span class="n">timeout</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">epoll_event</span><span class="w"> </span><span class="n">events</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">timeout_ms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">-1</span><span class="p">;</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">timeout</span><span class="p">.</span><span class="n">has_value</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">timeout_ms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">timeout</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">nr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">epoll_wait</span><span class="p">(</span><span class="n">epoll_fd_</span><span class="p">,</span><span class="w"> </span><span class="n">events</span><span class="p">,</span><span class="w"> </span>
+<span class="w">                           </span><span class="n">arraysize</span><span class="p">(</span><span class="n">events</span><span class="p">),</span><span class="w"> </span><span class="n">timeout_ms</span><span class="p">);</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nr</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">-1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">PLOG</span><span class="p">(</span><span class="n">ERROR</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;epoll_wait failed&quot;</span><span class="p">;</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">nullopt</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">nr</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">auto</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">handlers_</span><span class="p">.</span><span class="n">find</span><span class="p">(</span><span class="n">events</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">data</span><span class="p">.</span><span class="n">fd</span><span class="p">);</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">it</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">handlers_</span><span class="p">.</span><span class="n">end</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="k">return</span><span class="w"> </span><span class="n">it</span><span class="o">-&gt;</span><span class="n">second</span><span class="p">;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">nullopt</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
 </code></pre></div>
 
 <p><strong>主循环实现</strong></p>

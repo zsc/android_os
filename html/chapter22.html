@@ -294,98 +294,389 @@
         <main class="content">
             <article>
                 <h1 id="22colorosemui">第22章：ColorOS/EMUI技术分析</h1>
-<p>本章深入剖析OPPO ColorOS和华为EMUI两大国产定制系统的技术实现，重点关注它们如何在Android基础上进行深度优化和创新。我们将探讨UI框架重构、AI调度优化、跨设备协同以及自研组件替换等核心技术，并与原生Android和iOS进行对比分析。</p>
+<p>本章深入剖析OPPO ColorOS和华为EMUI两大国产定制系统的技术实现，重点关注它们如何在Android基础上进行深度优化和创新。我们将探讨UI框架重构、AI调度优化、跨设备协同以及自研组件替换等核心技术，并与原生Android和iOS进行对比分析。通过对这两个系统的技术解析，我们可以了解国产厂商如何在保持Android兼容性的同时，实现差异化创新和性能突破。</p>
 <h2 id="221-ui">22.1 系统UI重构</h2>
 <h3 id="2211-coloros-ui">22.1.1 ColorOS UI框架修改</h3>
-<p>ColorOS对Android UI框架进行了全方位的重构和优化：</p>
+<p>ColorOS对Android UI框架进行了全方位的重构和优化，其改造深度涉及从Java Framework层到Native渲染层的多个关键组件：</p>
 <p><strong>量子动画引擎3.0</strong>：ColorOS重写了Android的动画系统，引入了基于物理引擎的动画框架。该引擎通过修改<code>Choreographer</code>和<code>RenderThread</code>的协作机制，实现了更流畅的动画效果。关键技术包括：</p>
 <ul>
-<li><strong>动画预测算法</strong>：通过分析用户手势轨迹，提前计算动画路径，减少动画延迟</li>
-<li><strong>智能插帧技术</strong>：在原有60Hz基础上，通过插帧算法实现120Hz的视觉效果</li>
-<li><strong>优先级调度</strong>：修改<code>ThreadedRenderer</code>的渲染优先级，保证关键动画的流畅性</li>
+<li><strong>动画预测算法</strong>：通过分析用户手势轨迹，提前计算动画路径，减少动画延迟。具体实现包括：</li>
+<li>手势速度向量分析：采集触摸事件的速度和加速度信息</li>
+<li>贝塞尔曲线拟合：根据手势轨迹生成平滑的动画路径</li>
+<li>预渲染缓冲：提前渲染未来2-3帧的画面内容</li>
+<li>
+<p>时间轴对齐：确保动画帧与VSYNC信号精确同步</p>
+</li>
+<li>
+<p><strong>智能插帧技术</strong>：在原有60Hz基础上，通过插帧算法实现120Hz的视觉效果</p>
+</li>
+<li>运动矢量估计：分析相邻帧之间的像素移动</li>
+<li>中间帧生成：基于运动补偿算法生成插值帧</li>
+<li>自适应插帧率：根据内容类型动态调整插帧策略</li>
+<li>
+<p>GPU硬件加速：利用GPU的并行计算能力加速插帧处理</p>
+</li>
+<li>
+<p><strong>优先级调度</strong>：修改<code>ThreadedRenderer</code>的渲染优先级，保证关键动画的流畅性</p>
+</li>
+<li>动画类型分级：触摸响应 &gt; 系统动画 &gt; 应用动画</li>
+<li>CPU亲和性绑定：将渲染线程绑定到大核心</li>
+<li>动态频率调整：根据动画复杂度调整CPU/GPU频率</li>
+<li>抢占式调度：允许高优先级动画中断低优先级任务</li>
 </ul>
 <p><strong>无边界设计2.0</strong>：ColorOS重新设计了系统UI的布局引擎，主要修改包括：</p>
 <ul>
 <li><strong>自适应布局系统</strong>：扩展了<code>ViewGroup</code>的测量和布局机制，支持更灵活的响应式设计</li>
-<li><strong>智能色彩系统</strong>：通过修改<code>ColorStateList</code>和<code>Drawable</code>的着色机制，实现动态主题适配</li>
-<li><strong>模糊算法优化</strong>：重写了<code>RenderEffect</code>的模糊实现，采用GPU加速的高斯模糊算法</li>
+<li>约束求解器：引入类似iOS AutoLayout的约束布局引擎</li>
+<li>弹性盒模型：支持Flexbox风格的布局方式</li>
+<li>网格系统：实现Material Design的响应式网格</li>
+<li>
+<p>断点适配：根据屏幕尺寸自动切换布局模式</p>
+</li>
+<li>
+<p><strong>智能色彩系统</strong>：通过修改<code>ColorStateList</code>和<code>Drawable</code>的着色机制，实现动态主题适配</p>
+</li>
+<li>色彩提取算法：从壁纸中提取主色调和强调色</li>
+<li>色彩空间转换：支持P3广色域和HDR10+</li>
+<li>动态着色引擎：实时调整UI元素的色彩饱和度和明度</li>
+<li>
+<p>无障碍优化：确保色彩对比度符合WCAG标准</p>
+</li>
+<li>
+<p><strong>模糊算法优化</strong>：重写了<code>RenderEffect</code>的模糊实现，采用GPU加速的高斯模糊算法</p>
+</li>
+<li>分离卷积核：将2D高斯模糊分解为两个1D操作</li>
+<li>降采样优化：先缩小图像再模糊，减少计算量</li>
+<li>缓存机制：复用模糊结果，避免重复计算</li>
+<li>实时预览：支持模糊半径的动态调整</li>
 </ul>
 <h3 id="2212-emui">22.1.2 EMUI显示引擎优化</h3>
-<p>EMUI在显示层面的优化更加激进，引入了多项自研技术：</p>
+<p>EMUI在显示层面的优化更加激进，引入了多项自研技术，形成了完整的显示技术栈：</p>
 <p><strong>华为自研渲染引擎</strong>：EMUI替换了部分Skia渲染管线，引入自研的渲染优化：</p>
 <ul>
 <li><strong>GPU Turbo X</strong>：通过修改<code>libhwui</code>和GPU驱动的交互方式，优化图形指令的批处理</li>
-<li><strong>智能分辨率调节</strong>：动态调整渲染分辨率，在保证视觉效果的同时降低功耗</li>
-<li><strong>HDR Vivid支持</strong>：扩展了<code>SurfaceFlinger</code>的色彩管理能力，支持更广的色域</li>
+<li>指令合并优化：识别相似的绘制调用并合并执行</li>
+<li>状态机优化：减少GPU状态切换的开销</li>
+<li>纹理图集管理：自动将小纹理合并为大图集</li>
+<li>着色器缓存：预编译和缓存常用着色器程序</li>
+<li>
+<p>渲染树优化：简化复杂场景的渲染节点结构</p>
+</li>
+<li>
+<p><strong>智能分辨率调节</strong>：动态调整渲染分辨率，在保证视觉效果的同时降低功耗</p>
+</li>
+<li>内容感知算法：识别UI、文字、图片等不同内容类型</li>
+<li>分区渲染策略：对不同区域采用不同分辨率</li>
+<li>眼动追踪集成：提高注视区域的渲染质量</li>
+<li>
+<p>动态超分辨率：使用AI算法提升低分辨率内容质量</p>
+</li>
+<li>
+<p><strong>HDR Vivid支持</strong>：扩展了<code>SurfaceFlinger</code>的色彩管理能力，支持更广的色域</p>
+</li>
+<li>10bit色深支持：从8bit扩展到10bit颜色通道</li>
+<li>色域映射算法：支持BT.2020、DCI-P3等广色域</li>
+<li>动态元数据处理：支持HDR10+和Dolby Vision</li>
+<li>色彩管理框架：统一管理不同色彩空间的转换</li>
 </ul>
 <p><strong>鸿鹄显示增强</strong>：针对华为自研芯片的显示优化：</p>
 <ul>
 <li><strong>画质引擎</strong>：在<code>HwComposer HAL</code>层加入AI画质增强算法</li>
-<li><strong>MEMC动态补帧</strong>：通过硬件加速实现视频内容的智能补帧</li>
-<li><strong>护眼模式2.0</strong>：修改<code>DisplayPowerController</code>，加入基于环境光的动态色温调节</li>
+<li>超分辨率重建：基于深度学习的图像超分技术</li>
+<li>噪声抑制算法：智能识别并消除图像噪点</li>
+<li>边缘增强技术：提升图像细节的清晰度</li>
+<li>色彩增强引擎：自动优化图像的色彩饱和度</li>
+<li>
+<p>场景识别优化：针对不同场景采用专门的增强策略</p>
+</li>
+<li>
+<p><strong>MEMC动态补帧</strong>：通过硬件加速实现视频内容的智能补帧</p>
+</li>
+<li>运动估计算法：精确计算物体运动轨迹</li>
+<li>运动补偿技术：生成自然流畅的中间帧</li>
+<li>场景切换检测：避免在镜头切换时产生伪影</li>
+<li>自适应帧率：根据内容动态调整目标帧率</li>
+<li>
+<p>低延迟处理：确保实时视频的流畅播放</p>
+</li>
+<li>
+<p><strong>护眼模式2.0</strong>：修改<code>DisplayPowerController</code>，加入基于环境光的动态色温调节</p>
+</li>
+<li>环境光谱分析：检测环境光的色温和强度</li>
+<li>生物节律同步：根据时间调整屏幕色温</li>
+<li>蓝光过滤算法：智能减少有害蓝光</li>
+<li>亮度自适应：基于内容和环境优化屏幕亮度</li>
+<li>频闪优化：采用DC调光减少屏幕闪烁</li>
 </ul>
 <h3 id="2213">22.1.3 动画系统重写</h3>
-<p>两个系统都对Android的动画框架进行了深度定制：</p>
+<p>两个系统都对Android的动画框架进行了深度定制，实现了更流畅和自然的动画效果：</p>
 <p><strong>ColorOS动画架构</strong>：</p>
 <ul>
 <li>重写<code>ValueAnimator</code>的时间插值器，加入基于贝塞尔曲线的自定义缓动函数</li>
-<li>扩展<code>WindowAnimationController</code>，支持更复杂的窗口转场动画</li>
-<li>修改<code>RecyclerView</code>的<code>ItemAnimator</code>，优化列表滚动性能</li>
+<li>物理动画模型：模拟真实世界的物理运动规律</li>
+<li>弹性动画效果：实现自然的回弹和阻尼效果</li>
+<li>手势跟随动画：动画速度与手势速度同步</li>
+<li>
+<p>可中断动画：支持动画过程中的平滑中断和反向</p>
+</li>
+<li>
+<p>扩展<code>WindowAnimationController</code>，支持更复杂的窗口转场动画</p>
+</li>
+<li>3D变换支持：实现立体翻转和透视效果</li>
+<li>多元素协同：多个UI元素的同步动画</li>
+<li>路径动画：沿自定义路径移动的动画效果</li>
+<li>
+<p>形态变换：支持不规则形状之间的平滑过渡</p>
+</li>
+<li>
+<p>修改<code>RecyclerView</code>的<code>ItemAnimator</code>，优化列表滚动性能</p>
+</li>
+<li>预布局优化：提前计算即将显示的列表项</li>
+<li>异步测量：在后台线程进行视图测量</li>
+<li>差分更新：只更新变化的列表项</li>
+<li>滚动预测：根据手势预测滚动目标位置</li>
 </ul>
 <p><strong>EMUI动画优化</strong>：</p>
 <ul>
 <li>引入动画预渲染机制，提前计算复杂动画的关键帧</li>
-<li>修改<code>Transition</code>框架，支持跨Activity的共享元素动画</li>
-<li>优化<code>ObjectAnimator</code>的属性更新机制，减少反射调用开销</li>
+<li>关键帧缓存：将计算结果缓存到内存</li>
+<li>GPU纹理缓存：预先上传纹理到GPU内存</li>
+<li>动画图谱生成：创建动画序列的纹理图集</li>
+<li>
+<p>并行渲染管线：利用多核CPU并行处理动画</p>
+</li>
+<li>
+<p>修改<code>Transition</code>框架，支持跨Activity的共享元素动画</p>
+</li>
+<li>元素追踪算法：精确匹配不同Activity中的元素</li>
+<li>坐标空间转换：处理不同Activity的坐标系统</li>
+<li>中间状态插值：生成平滑的过渡动画</li>
+<li>
+<p>异步加载优化：在动画过程中加载目标Activity</p>
+</li>
+<li>
+<p>优化<code>ObjectAnimator</code>的属性更新机制，减少反射调用开销</p>
+</li>
+<li>属性直接访问：绕过反射直接修改属性值</li>
+<li>批量属性更新：合并多个属性的更新操作</li>
+<li>JNI快速通道：使用JNI直接调用native方法</li>
+<li>属性动画池：复用动画对象减少内存分配</li>
 </ul>
 <h3 id="2214-android-ui">22.1.4 与原生Android UI对比</h3>
 <p><strong>架构层面的差异</strong>：</p>
 <ol>
 <li>
 <p><strong>渲染管线</strong>：
-   - 原生Android：<code>View</code> → <code>DisplayList</code> → <code>RenderNode</code> → <code>Skia</code> → <code>GPU</code>
-   - ColorOS：在<code>RenderNode</code>层加入优化缓存和预测渲染
-   - EMUI：部分替换Skia，使用自研渲染引擎</p>
+   - 原生Android：<code>View</code> → <code>DisplayList</code> → <code>RenderNode</code> → <code>Skia</code> → <code>GPU</code></p>
+<ul>
+<li>标准流程：视图树遍历 → 构建显示列表 → 渲染节点生成 → Skia绘制 → GPU合成</li>
+<li>同步渲染：主线程和渲染线程串行工作</li>
+<li>ColorOS：在<code>RenderNode</code>层加入优化缓存和预测渲染</li>
+<li>缓存策略：保存常用渲染节点，避免重复构建</li>
+<li>预测渲染：基于用户行为预测下一帧内容</li>
+<li>并行处理：多个渲染节点并行处理</li>
+<li>EMUI：部分替换Skia，使用自研渲染引擎</li>
+<li>混合渲染：Skia处理2D图形，自研引擎处理3D和特效</li>
+<li>直接GPU访问：绕过部分中间层，直接操作GPU</li>
+</ul>
 </li>
 <li>
 <p><strong>动画系统</strong>：
-   - 原生Android：基于时间的线性插值
-   - ColorOS：基于物理引擎的真实运动模拟
-   - EMUI：硬件加速的动画预渲染</p>
+   - 原生Android：基于时间的线性插值</p>
+<ul>
+<li>固定时间步长：16.67ms（60fps）</li>
+<li>简单插值器：线性、加速、减速等基础曲线</li>
+<li>同步更新：动画帧与UI帧同步</li>
+<li>ColorOS：基于物理引擎的真实运动模拟</li>
+<li>物理参数：质量、摩擦力、弹性系数</li>
+<li>自然运动：符合物理规律的动画效果</li>
+<li>动态帧率：根据动画复杂度调整帧率</li>
+<li>EMUI：硬件加速的动画预渲染</li>
+<li>GPU计算：利用GPU并行计算能力</li>
+<li>帧缓存：预先渲染并缓存动画帧</li>
+<li>智能调度：根据系统负载动态调整策略</li>
+</ul>
 </li>
 <li>
 <p><strong>布局优化</strong>：
-   - 原生Android：标准的<code>measure</code>/<code>layout</code>/<code>draw</code>流程
-   - ColorOS：智能布局缓存，减少重复测量
-   - EMUI：异步布局膨胀，提升复杂界面加载速度</p>
+   - 原生Android：标准的<code>measure</code>/<code>layout</code>/<code>draw</code>流程</p>
+<ul>
+<li>递归测量：从根视图递归测量所有子视图</li>
+<li>同步布局：在主线程完成所有布局计算</li>
+<li>完整重绘：任何改变都可能触发整个视图树重绘</li>
+<li>ColorOS：智能布局缓存，减少重复测量</li>
+<li>增量测量：只测量发生变化的视图</li>
+<li>布局缓存：缓存测量结果，避免重复计算</li>
+<li>脏区域优化：只重绘变化的区域</li>
+<li>EMUI：异步布局膨胀，提升复杂界面加载速度</li>
+<li>预加载线程：在后台线程预先加载布局</li>
+<li>分块渲染：将复杂布局分块异步处理</li>
+<li>延迟加载：非可见区域延迟加载</li>
+</ul>
 </li>
 </ol>
 <p><strong>性能对比数据</strong>：</p>
 <ul>
 <li>应用启动速度：ColorOS/EMUI相比原生Android提升20-30%</li>
+<li>冷启动优化：预创建进程池，减少进程创建时间</li>
+<li>热启动优化：保持应用部分状态，快速恢复</li>
 <li>列表滑动流畅度：掉帧率降低40-50%</li>
+<li>预测性渲染：提前准备即将显示的内容</li>
+<li>智能回收：优化ViewHolder的回收和复用</li>
 <li>动画响应延迟：从原生的16ms降低到8-10ms</li>
+<li>触摸预测：预测手指移动轨迹</li>
+<li>优先级调度：触摸事件最高优先级处理</li>
+</ul>
+<p><strong>内存和功耗影响</strong>：</p>
+<ul>
+<li>内存占用：优化后内存占用增加5-10%（缓存开销）</li>
+<li>GPU负载：峰值负载降低20%（优化的渲染路径）</li>
+<li>功耗表现：整体功耗降低15%（减少重复计算）</li>
 </ul>
 <h2 id="222-ai">22.2 AI调度优化</h2>
 <h3 id="2221-coloros-ai">22.2.1 ColorOS AI调度器</h3>
-<p>ColorOS引入了基于机器学习的智能调度系统，对Linux内核调度器进行了深度定制：</p>
+<p>ColorOS引入了基于机器学习的智能调度系统，对Linux内核调度器进行了深度定制，形成了完整的AI驱动调度体系：</p>
 <p><strong>AI预测调度</strong>：</p>
 <ul>
 <li><strong>应用行为学习</strong>：通过分析应用的CPU使用模式、内存访问特征和I/O行为，构建应用画像</li>
-<li><strong>场景识别引擎</strong>：识别游戏、视频、社交等不同场景，动态调整调度策略</li>
-<li><strong>资源预分配</strong>：基于用户习惯预测，提前为即将启动的应用分配资源</li>
+<li>CPU使用模式分析：<ul>
+<li>突发型：社交应用的消息推送处理</li>
+<li>持续型：游戏的渲染循环</li>
+<li>周期型：音乐播放的解码任务</li>
+<li>混合型：视频应用的解码+渲染</li>
+</ul>
+</li>
+<li>内存访问特征：<ul>
+<li>工作集大小：应用常驻内存需求</li>
+<li>访问局部性：缓存友好程度</li>
+<li>分配模式：大块分配vs小块频繁分配</li>
+</ul>
+</li>
+<li>
+<p>I/O行为模式：</p>
+<ul>
+<li>顺序读写：视频播放</li>
+<li>随机访问：数据库查询</li>
+<li>突发写入：拍照存储</li>
+</ul>
+</li>
+<li>
+<p><strong>场景识别引擎</strong>：识别游戏、视频、社交等不同场景，动态调整调度策略</p>
+</li>
+<li>游戏场景优化：<ul>
+<li>渲染线程独占大核</li>
+<li>禁用CPU节能策略</li>
+<li>内存压缩暂停</li>
+<li>GPU频率锁定高位</li>
+</ul>
+</li>
+<li>视频场景优化：<ul>
+<li>解码线程优先级提升</li>
+<li>预读缓冲区扩大</li>
+<li>屏幕刷新率匹配视频帧率</li>
+</ul>
+</li>
+<li>
+<p>社交场景优化：</p>
+<ul>
+<li>快速响应消息推送</li>
+<li>后台应用激进休眠</li>
+<li>网络唤醒优化</li>
+</ul>
+</li>
+<li>
+<p><strong>资源预分配</strong>：基于用户习惯预测，提前为即将启动的应用分配资源</p>
+</li>
+<li>时序预测模型：LSTM网络预测应用启动序列</li>
+<li>地理位置关联：基于位置预测常用应用</li>
+<li>关联规则挖掘：发现应用使用的关联模式</li>
+<li>预分配策略：<ul>
+<li>内存预留：提前分配应用所需内存</li>
+<li>进程预创建：预先fork空进程等待</li>
+<li>类预加载：加载应用常用类到内存</li>
+</ul>
+</li>
 </ul>
 <p><strong>内核调度器修改</strong>：</p>
 <ul>
 <li>修改CFS（完全公平调度器）的<code>vruntime</code>计算方式，加入AI权重因子</li>
-<li>扩展<code>schedutil</code> CPU频率调节器，支持基于场景的频率预测</li>
-<li>引入<code>task_struct</code>的扩展字段，记录应用的历史行为特征</li>
 </ul>
+<div class="codehilite"><pre><span></span><code><span class="n">vruntime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vruntime_base</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ai_weight_factor</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">delta_exec</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">load_weight</span>
+<span class="err">其中</span><span class="n">ai_weight_factor根据应用重要性和用户偏好动态调整</span>
+</code></pre></div>
+
+<ul>
+<li>前台应用权重：1.5-2.0</li>
+<li>用户常用应用：1.2-1.5</li>
+<li>系统关键服务：1.3-1.8</li>
+<li>
+<p>后台应用：0.5-0.8</p>
+</li>
+<li>
+<p>扩展<code>schedutil</code> CPU频率调节器，支持基于场景的频率预测</p>
+</li>
+<li>预测模型输入：<ul>
+<li>当前CPU利用率</li>
+<li>运行队列长度</li>
+<li>任务类型标识</li>
+<li>历史频率数据</li>
+</ul>
+</li>
+<li>
+<p>频率决策输出：</p>
+<ul>
+<li>目标频率值</li>
+<li>升频速度</li>
+<li>降频延迟</li>
+<li>频率锁定时长</li>
+</ul>
+</li>
+<li>
+<p>引入<code>task_struct</code>的扩展字段，记录应用的历史行为特征</p>
+</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="nx">struct</span><span class="w"> </span><span class="nx">task_struct_ext</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">u64</span><span class="w"> </span><span class="nx">total_cpu_time</span><span class="p">;</span><span class="w">      </span><span class="c1">// 累计CPU时间</span>
+<span class="w">    </span><span class="kt">u64</span><span class="w"> </span><span class="nx">avg_burst_length</span><span class="p">;</span><span class="w">    </span><span class="c1">// 平均突发长度</span>
+<span class="w">    </span><span class="kt">u32</span><span class="w"> </span><span class="nx">wakeup_frequency</span><span class="p">;</span><span class="w">    </span><span class="c1">// 唤醒频率</span>
+<span class="w">    </span><span class="kt">u32</span><span class="w"> </span><span class="nx">cache_miss_rate</span><span class="p">;</span><span class="w">     </span><span class="c1">// 缓存失效率</span>
+<span class="w">    </span><span class="kt">u16</span><span class="w"> </span><span class="nx">preferred_cpu</span><span class="p">;</span><span class="w">       </span><span class="c1">// 偏好CPU核心</span>
+<span class="w">    </span><span class="kt">u16</span><span class="w"> </span><span class="nx">scene_type</span><span class="p">;</span><span class="w">          </span><span class="c1">// 场景类型标识</span>
+<span class="w">    </span><span class="kt">u8</span><span class="w">  </span><span class="nx">priority_boost</span><span class="p">;</span><span class="w">      </span><span class="c1">// 优先级提升值</span>
+<span class="w">    </span><span class="kt">u8</span><span class="w">  </span><span class="nx">power_hint</span><span class="p">;</span><span class="w">          </span><span class="c1">// 功耗提示</span>
+<span class="p">};</span>
+</code></pre></div>
+
 <p><strong>Quantum Animation Engine</strong>：</p>
 <ul>
 <li>将UI线程和渲染线程绑定到大核，保证动画流畅性</li>
-<li>动态调整线程优先级，根据触摸事件预测用户意图</li>
-<li>智能CPU亲和性设置，减少线程迁移开销</li>
+<li>CPU亲和性设置：<ul>
+<li>UI线程 → CPU 6/7（大核）</li>
+<li>渲染线程 → CPU 4/5（大核）</li>
+<li>工作线程 → CPU 0-3（小核）</li>
+</ul>
+</li>
+<li>
+<p>独占核心模式：关键动画期间独占CPU核心</p>
+</li>
+<li>
+<p>动态调整线程优先级，根据触摸事件预测用户意图</p>
+</li>
+<li>
+<p>触摸事件分析：</p>
+<ul>
+<li>点击：瞬时优先级提升</li>
+<li>滑动：持续高优先级</li>
+<li>缩放：多点触控优化</li>
+<li>长按：延迟响应处理</li>
+</ul>
+</li>
+<li>
+<p>智能CPU亲和性设置，减少线程迁移开销</p>
+</li>
+<li>迁移成本评估：缓存重建开销vs负载均衡收益</li>
+<li>亲和性继承：相关线程保持相同CPU亲和性</li>
+<li>NUMA感知：考虑内存访问局部性</li>
 </ul>
 <h3 id="2222-emui-gpu-turbo">22.2.2 EMUI GPU Turbo技术</h3>
 <p>EMUI的GPU Turbo是一项革命性的图形加速技术，通过软硬件协同优化提升图形性能：</p>

@@ -297,123 +297,419 @@
 <p>Android虽然基于Linux内核，但为了满足移动设备的特殊需求，Google对标准Linux内核进行了大量定制。这些修改不仅涉及性能优化和功耗管理，更包括了全新的IPC机制、内存管理策略和安全模型。本章将深入剖析Android内核层的关键定制，理解这些修改背后的设计理念，并与标准Linux、iOS和鸿蒙系统进行对比分析。</p>
 <h2 id="21-android">2.1 Android特有的内核修改</h2>
 <h3 id="211">2.1.1 内核补丁集概览</h3>
-<p>Android内核基于Linux LTS（长期支持）版本，通过一系列补丁集进行定制。主要修改包括：</p>
+<p>Android内核基于Linux LTS（长期支持）版本，通过一系列补丁集进行定制。从Android 4.14内核开始，Google采用了更系统化的补丁管理方式，将Android特有修改组织成不同的功能模块。主要修改包括：</p>
 <ol>
 <li>
 <p><strong>电源管理增强</strong>
-   - Wakelock机制（已逐步被标准Linux的autosleep替代）
-   - Early Suspend/Late Resume（已废弃，被Runtime PM替代）
-   - CPU频率调节器定制（Interactive Governor）
-   - Doze模式内核支持（通过<code>alarmtimer</code>和<code>timerfd</code>）
-   - 动态电压频率调节（DVFS）优化</p>
+   - Wakelock机制（已逐步被标准Linux的autosleep替代）</p>
+<ul>
+<li>内核接口：<code>/sys/power/wake_lock</code>和<code>/sys/power/wake_unlock</code></li>
+<li>用户空间通过PowerManager API管理</li>
+<li>支持部分唤醒锁（Partial Wakelock）防止CPU休眠</li>
+<li>Early Suspend/Late Resume（已废弃，被Runtime PM替代）</li>
+<li>触发时机：屏幕关闭/开启</li>
+<li>影响设备：显示、触摸、传感器等</li>
+<li>CPU频率调节器定制（Interactive Governor）</li>
+<li>响应延迟优化：20ms内响应用户交互</li>
+<li>多核协调：大小核迁移策略</li>
+<li>场景识别：游戏、视频、浏览等</li>
+<li>Doze模式内核支持（通过<code>alarmtimer</code>和<code>timerfd</code>）</li>
+<li>深度睡眠状态管理</li>
+<li>批量唤醒机制（Alarm Batching）</li>
+<li>应用待机桶（App Standby Buckets）支持</li>
+<li>动态电压频率调节（DVFS）优化</li>
+<li>能效曲线学习</li>
+<li>温度感知调节</li>
+<li>AI预测负载</li>
+</ul>
 </li>
 <li>
 <p><strong>内存管理优化</strong>
-   - Low Memory Killer（LMK）及其用户空间实现LMKD
-   - ION内存分配器（统一的内存管理框架）
-   - ZRAM压缩交换分区（使用LZ4/ZSTD算法）
-   - KSM（Kernel Samepage Merging）优化
-   - Per-app内存追踪（<code>memtrack</code> HAL支持）
-   - 进程状态收集（<code>/proc/pid/oom_score_adj</code>）</p>
+   - Low Memory Killer（LMK）及其用户空间实现LMKD</p>
+<ul>
+<li>多级内存水位线设计</li>
+<li>基于进程重要性的回收策略</li>
+<li>与用户体验相关的优先级算法</li>
+<li>ION内存分配器（统一的内存管理框架）</li>
+<li>跨进程零拷贝共享</li>
+<li>硬件加速器内存管理</li>
+<li>DMA-BUF集成支持</li>
+<li>ZRAM压缩交换分区（使用LZ4/ZSTD算法）</li>
+<li>动态压缩比调整</li>
+<li>写回（Writeback）支持</li>
+<li>多流（Multi-stream）并发压缩</li>
+<li>KSM（Kernel Samepage Merging）优化</li>
+<li>扫描频率自适应</li>
+<li>应用级别控制</li>
+<li>与MADV_MERGEABLE集成</li>
+<li>Per-app内存追踪（<code>memtrack</code> HAL支持）</li>
+<li>GPU/Multimedia内存统计</li>
+<li>进程内存归属准确计算</li>
+<li>实时内存压力反馈</li>
+<li>进程状态收集（<code>/proc/pid/oom_score_adj</code>）</li>
+<li>动态优先级调整接口</li>
+<li>与ActivityManager深度集成</li>
+<li>支持-1000到1000的精细控制</li>
+</ul>
 </li>
 <li>
 <p><strong>进程间通信</strong>
-   - Binder驱动（高效的IPC机制）
-   - Ashmem（匿名共享内存）
-   - FuseD守护进程支持（Android 11+）
-   - HwBinder（硬件服务专用，Android 8.0+）</p>
+   - Binder驱动（高效的IPC机制）</p>
+<ul>
+<li>一次拷贝架构设计</li>
+<li>内核级线程池管理</li>
+<li>对象引用计数和生命周期</li>
+<li>Ashmem（匿名共享内存）</li>
+<li>内存区域命名和大小设置</li>
+<li>支持内存压力下的自动回收</li>
+<li>与Binder配合实现大数据传输</li>
+<li>FuseD守护进程支持（Android 11+）</li>
+<li>用户空间文件系统性能优化</li>
+<li>零拷贝路径（Zero-copy path）</li>
+<li>与SDCardFS的迁移路径</li>
+<li>HwBinder（硬件服务专用，Android 8.0+）</li>
+<li>专为HAL设计的高性能通道</li>
+<li>支持直通模式（Passthrough）</li>
+<li>与HIDL紧密集成</li>
+</ul>
 </li>
 <li>
 <p><strong>安全增强</strong>
-   - Paranoid网络权限检查（基于GID）
-   - SELinux强制访问控制定制
-   - seccomp过滤器扩展
-   - dm-verity完整性验证
-   - 文件加密（fscrypt）集成</p>
+   - Paranoid网络权限检查（基于GID）</p>
+<ul>
+<li>INTERNET权限组（GID 3003）</li>
+<li>细粒度套接字访问控制</li>
+<li>与iptables规则联动</li>
+<li>SELinux强制访问控制定制</li>
+<li>Android特定域（Domain）和类型（Type）</li>
+<li>动态策略加载支持</li>
+<li>与应用沙箱的集成</li>
+<li>seccomp过滤器扩展</li>
+<li>系统调用白名单机制</li>
+<li>架构特定的过滤规则</li>
+<li>性能优化的BPF实现</li>
+<li>dm-verity完整性验证</li>
+<li>块级别哈希树验证</li>
+<li>与启动验证（Verified Boot）集成</li>
+<li>错误处理和恢复机制</li>
+<li>文件加密（fscrypt）集成</li>
+<li>每用户密钥管理</li>
+<li>硬件加密引擎支持</li>
+<li>文件名和内容分别加密</li>
+</ul>
 </li>
 </ol>
 <h3 id="212">2.1.2 内核配置特点</h3>
-<p>Android内核配置（defconfig）与标准Linux发行版存在显著差异：</p>
+<p>Android内核配置（defconfig）与标准Linux发行版存在显著差异，这些差异反映了移动设备的特殊需求：</p>
 <div class="codehilite"><pre><span></span><code><span class="o">#</span> <span class="err">核心</span><span class="n">Android功能</span>
 <span class="n">CONFIG_ANDROID</span><span class="o">=</span><span class="n">y</span>
 <span class="n">CONFIG_ANDROID_BINDER_IPC</span><span class="o">=</span><span class="n">y</span>
 <span class="n">CONFIG_ANDROID_BINDERFS</span><span class="o">=</span><span class="n">y</span>
 <span class="n">CONFIG_ANDROID_BINDER_DEVICES</span><span class="o">=</span><span class="s">&quot;binder,hwbinder,vndbinder&quot;</span>
-<span class="n">CONFIG_ANDROID_BINDER_IPC_32BIT</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ANDROID_BINDER_IPC_32BIT</span><span class="o">=</span><span class="n">y</span>  <span class="o">#</span> <span class="mi">32</span><span class="err">位兼容性支持</span>
 
 <span class="o">#</span> <span class="err">内存管理</span>
-<span class="n">CONFIG_ANDROID_LOW_MEMORY_KILLER</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_ASHMEM</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_ION</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_ION_SYSTEM_HEAP</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_ZRAM</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_CRYPTO_LZ4</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_ANDROID_LOW_MEMORY_KILLER</span><span class="o">=</span><span class="n">y</span>  <span class="o">#</span> <span class="err">逐步被</span><span class="n">PSI替代</span>
+<span class="n">CONFIG_ASHMEM</span><span class="o">=</span><span class="n">y</span>                     <span class="o">#</span> <span class="err">匿名共享内存</span>
+<span class="n">CONFIG_ION</span><span class="o">=</span><span class="n">y</span>                        <span class="o">#</span> <span class="err">统一内存分配器</span>
+<span class="n">CONFIG_ION_SYSTEM_HEAP</span><span class="o">=</span><span class="n">y</span>            <span class="o">#</span> <span class="err">系统堆支持</span>
+<span class="n">CONFIG_ZRAM</span><span class="o">=</span><span class="n">y</span>                       <span class="o">#</span> <span class="err">压缩内存交换</span>
+<span class="n">CONFIG_CRYPTO_LZ4</span><span class="o">=</span><span class="n">y</span>                 <span class="o">#</span> <span class="err">快速压缩算法</span>
+<span class="n">CONFIG_ZSMALLOC</span><span class="o">=</span><span class="n">y</span>                   <span class="o">#</span> <span class="err">专用内存分配器</span>
+<span class="n">CONFIG_ZSMALLOC_STAT</span><span class="o">=</span><span class="n">y</span>              <span class="o">#</span> <span class="err">统计信息支持</span>
 
 <span class="o">#</span> <span class="err">电源管理</span>
-<span class="n">CONFIG_PM_WAKELOCKS</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_PM_WAKELOCKS_LIMIT</span><span class="o">=</span><span class="mi">100</span>
-<span class="n">CONFIG_PM_WAKELOCKS_GC</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_SUSPEND_TIME</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_PM_WAKELOCKS</span><span class="o">=</span><span class="n">y</span>               <span class="o">#</span> <span class="err">唤醒锁机制</span>
+<span class="n">CONFIG_PM_WAKELOCKS_LIMIT</span><span class="o">=</span><span class="mi">100</span>       <span class="o">#</span> <span class="err">最大唤醒锁数量</span>
+<span class="n">CONFIG_PM_WAKELOCKS_GC</span><span class="o">=</span><span class="n">y</span>            <span class="o">#</span> <span class="err">自动垃圾回收</span>
+<span class="n">CONFIG_SUSPEND_TIME</span><span class="o">=</span><span class="n">y</span>               <span class="o">#</span> <span class="err">休眠时间统计</span>
+<span class="n">CONFIG_PM_AUTOSLEEP</span><span class="o">=</span><span class="n">y</span>               <span class="o">#</span> <span class="err">自动休眠支持</span>
+<span class="n">CONFIG_PM_WAKEUP_TIMES</span><span class="o">=</span><span class="n">y</span>            <span class="o">#</span> <span class="err">唤醒源时间跟踪</span>
+
+<span class="o">#</span> <span class="err">调度器优化</span>
+<span class="n">CONFIG_SCHED_TUNE</span><span class="o">=</span><span class="n">y</span>                 <span class="o">#</span> <span class="err">能效感知调度</span>
+<span class="n">CONFIG_SCHED_WALT</span><span class="o">=</span><span class="n">y</span>                 <span class="o">#</span> <span class="n">Window</span> <span class="n">Assisted</span> <span class="n">Load</span> <span class="n">Tracking</span>
+<span class="n">CONFIG_CPU_FREQ_TIMES</span><span class="o">=</span><span class="n">y</span>             <span class="o">#</span> <span class="n">CPU频率时间统计</span>
+<span class="n">CONFIG_CPU_FREQ_GOV_SCHEDUTIL</span><span class="o">=</span><span class="n">y</span>     <span class="o">#</span> <span class="err">调度器驱动的频率调节</span>
+<span class="n">CONFIG_UCLAMP_TASK</span><span class="o">=</span><span class="n">y</span>                <span class="o">#</span> <span class="err">任务利用率钳制</span>
+<span class="n">CONFIG_UCLAMP_BUCKETS_COUNT</span><span class="o">=</span><span class="mi">20</span>      <span class="o">#</span> <span class="err">利用率桶数量</span>
 
 <span class="o">#</span> <span class="err">安全相关</span>
-<span class="n">CONFIG_SECURITY_SELINUX</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_SECURITY_SELINUX_BOOTPARAM</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_SECURITY_SELINUX_DEVELOP</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_SECCOMP</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_SECCOMP_FILTER</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_SECURITY_SELINUX</span><span class="o">=</span><span class="n">y</span>           <span class="o">#</span> <span class="n">SELinux强制访问控制</span>
+<span class="n">CONFIG_SECURITY_SELINUX_BOOTPARAM</span><span class="o">=</span><span class="n">y</span> <span class="o">#</span> <span class="err">启动参数控制</span>
+<span class="n">CONFIG_SECURITY_SELINUX_DEVELOP</span><span class="o">=</span><span class="n">y</span>   <span class="o">#</span> <span class="err">开发模式（产品版本应禁用）</span>
+<span class="n">CONFIG_SECCOMP</span><span class="o">=</span><span class="n">y</span>                    <span class="o">#</span> <span class="err">系统调用过滤</span>
+<span class="n">CONFIG_SECCOMP_FILTER</span><span class="o">=</span><span class="n">y</span>             <span class="o">#</span> <span class="n">BPF过滤器支持</span>
+<span class="n">CONFIG_HARDENED_USERCOPY</span><span class="o">=</span><span class="n">y</span>          <span class="o">#</span> <span class="err">用户空间拷贝加固</span>
+<span class="n">CONFIG_CC_STACKPROTECTOR_STRONG</span><span class="o">=</span><span class="n">y</span>   <span class="o">#</span> <span class="err">栈保护</span>
+<span class="n">CONFIG_INIT_STACK_ALL_ZERO</span><span class="o">=</span><span class="n">y</span>        <span class="o">#</span> <span class="err">栈初始化</span>
+
+<span class="o">#</span> <span class="err">文件系统</span>
+<span class="n">CONFIG_F2FS_FS</span><span class="o">=</span><span class="n">y</span>                    <span class="o">#</span> <span class="n">Flash友好文件系统</span>
+<span class="n">CONFIG_F2FS_FS_SECURITY</span><span class="o">=</span><span class="n">y</span>           <span class="o">#</span> <span class="err">安全标签支持</span>
+<span class="n">CONFIG_F2FS_FS_ENCRYPTION</span><span class="o">=</span><span class="n">y</span>         <span class="o">#</span> <span class="err">加密支持</span>
+<span class="n">CONFIG_FS_VERITY</span><span class="o">=</span><span class="n">y</span>                  <span class="o">#</span> <span class="err">文件完整性验证</span>
+<span class="n">CONFIG_EROFS_FS</span><span class="o">=</span><span class="n">y</span>                   <span class="o">#</span> <span class="err">增强型只读文件系统</span>
+<span class="n">CONFIG_INCREMENTAL_FS</span><span class="o">=</span><span class="n">y</span>             <span class="o">#</span> <span class="err">增量文件系统（</span><span class="n">Android</span> <span class="mi">11</span><span class="o">+</span><span class="err">）</span>
+
+<span class="o">#</span> <span class="err">网络增强</span>
+<span class="n">CONFIG_NETFILTER_XT_TARGET_QTAGUID</span><span class="o">=</span><span class="n">y</span>  <span class="o">#</span> <span class="err">数据使用统计</span>
+<span class="n">CONFIG_NETFILTER_XT_MATCH_QUOTA2</span><span class="o">=</span><span class="n">y</span>    <span class="o">#</span> <span class="err">配额管理</span>
+<span class="n">CONFIG_NETFILTER_XT_MATCH_OWNER</span><span class="o">=</span><span class="n">y</span>     <span class="o">#</span> <span class="err">基于</span><span class="n">UID的过滤</span>
+<span class="n">CONFIG_NET_CLS_U32</span><span class="o">=</span><span class="n">y</span>                  <span class="o">#</span> <span class="err">流量分类</span>
+<span class="n">CONFIG_NET_SCH_HTB</span><span class="o">=</span><span class="n">y</span>                  <span class="o">#</span> <span class="err">分层令牌桶</span>
 
 <span class="o">#</span> <span class="err">调试支持</span>
-<span class="n">CONFIG_PANIC_TIMEOUT</span><span class="o">=</span><span class="mi">5</span>
-<span class="n">CONFIG_PANIC_ON_OOPS</span><span class="o">=</span><span class="n">y</span>
-<span class="n">CONFIG_DEBUG_RODATA</span><span class="o">=</span><span class="n">y</span>
+<span class="n">CONFIG_PANIC_TIMEOUT</span><span class="o">=</span><span class="mi">5</span>              <span class="o">#</span> <span class="err">内核恐慌后</span><span class="mi">5</span><span class="err">秒重启</span>
+<span class="n">CONFIG_PANIC_ON_OOPS</span><span class="o">=</span><span class="n">y</span>              <span class="o">#</span> <span class="n">OOPS时触发恐慌</span>
+<span class="n">CONFIG_DEBUG_RODATA</span><span class="o">=</span><span class="n">y</span>               <span class="o">#</span> <span class="err">只读数据段保护</span>
+<span class="n">CONFIG_DEVMEM</span><span class="o">=</span><span class="n">n</span>                     <span class="o">#</span> <span class="err">禁用</span><span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">mem</span><span class="err">（安全）</span>
+<span class="n">CONFIG_DEVKMEM</span><span class="o">=</span><span class="n">n</span>                    <span class="o">#</span> <span class="err">禁用</span><span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">kmem</span><span class="err">（安全）</span>
+<span class="n">CONFIG_IKCONFIG_PROC</span><span class="o">=</span><span class="n">y</span>              <span class="o">#</span> <span class="o">/</span><span class="n">proc</span><span class="o">/</span><span class="n">config</span><span class="p">.</span><span class="n">gz支持</span>
+
+<span class="o">#</span> <span class="err">追踪和性能分析</span>
+<span class="n">CONFIG_FTRACE</span><span class="o">=</span><span class="n">y</span>                     <span class="o">#</span> <span class="err">函数追踪框架</span>
+<span class="n">CONFIG_FUNCTION_TRACER</span><span class="o">=</span><span class="n">y</span>            <span class="o">#</span> <span class="err">函数级追踪</span>
+<span class="n">CONFIG_PREEMPTIRQ_EVENTS</span><span class="o">=</span><span class="n">y</span>          <span class="o">#</span> <span class="err">中断延迟追踪</span>
+<span class="n">CONFIG_SCHED_TRACER</span><span class="o">=</span><span class="n">y</span>               <span class="o">#</span> <span class="err">调度器追踪</span>
+<span class="n">CONFIG_BLK_DEV_IO_TRACE</span><span class="o">=</span><span class="n">y</span>           <span class="o">#</span> <span class="err">块设备</span><span class="n">IO追踪</span>
+<span class="n">CONFIG_PERF_EVENTS</span><span class="o">=</span><span class="n">y</span>                <span class="o">#</span> <span class="err">性能计数器支持</span>
+
+<span class="o">#</span> <span class="err">虚拟化支持（</span><span class="n">Android</span> <span class="mi">13</span><span class="o">+</span><span class="err">）</span>
+<span class="n">CONFIG_KVM</span><span class="o">=</span><span class="n">y</span>                        <span class="o">#</span> <span class="n">KVM虚拟化</span>
+<span class="n">CONFIG_VHOST_VSOCK</span><span class="o">=</span><span class="n">y</span>                <span class="o">#</span> <span class="err">虚拟机通信</span>
+<span class="n">CONFIG_VIRTIO_BLK</span><span class="o">=</span><span class="n">y</span>                 <span class="o">#</span> <span class="err">虚拟块设备</span>
 </code></pre></div>
 
 <p>这些配置选项启用了Android特有的内核功能。值得注意的是，从Android 11开始，许多Android特有功能正在通过GKI（Generic Kernel Image）项目模块化，以减少碎片化。</p>
-<p>关键配置差异：</p>
-<ul>
-<li><strong>调度器</strong>：Android偏向使用<code>CONFIG_SCHED_TUNE</code>进行能效优化</li>
-<li><strong>文件系统</strong>：默认启用F2FS、SquashFS用于系统分区</li>
-<li><strong>网络</strong>：启用更严格的套接字权限控制</li>
-<li><strong>追踪</strong>：默认集成ftrace用于systrace性能分析</li>
-</ul>
+<p><strong>关键配置差异深度分析</strong>：</p>
+<ol>
+<li>
+<p><strong>调度器配置</strong>
+   - Android使用<code>CONFIG_SCHED_TUNE</code>和<code>CONFIG_SCHED_WALT</code>进行能效优化
+   - 支持基于窗口的负载跟踪，更准确预测任务需求
+   - <code>CONFIG_UCLAMP_TASK</code>允许细粒度控制任务CPU利用率
+   - 标准Linux更注重服务器工作负载的公平性</p>
+</li>
+<li>
+<p><strong>文件系统选择</strong>
+   - F2FS针对NAND闪存优化，减少写放大
+   - EROFS提供高压缩比的只读系统分区
+   - 增量文件系统支持按需下载APK资源
+   - 标准Linux主要使用ext4/XFS等传统文件系统</p>
+</li>
+<li>
+<p><strong>网络栈定制</strong>
+   - QTAGUID提供per-app数据统计
+   - 支持基于UID的防火墙规则
+   - 移动网络优化（快速休眠、连接迁移）
+   - 标准Linux面向数据中心网络优化</p>
+</li>
+<li>
+<p><strong>内存管理特性</strong>
+   - ZRAM默认启用，提供内存压缩
+   - PSI（Pressure Stall Information）集成
+   - 更激进的内存回收策略
+   - 标准Linux依赖swap文件和保守OOM</p>
+</li>
+<li>
+<p><strong>安全加固</strong>
+   - SELinux强制启用，不可运行时禁用
+   - 更严格的内核地址空间布局随机化（KASLR）
+   - Control Flow Integrity（CFI）保护
+   - 标准Linux的安全特性通常可选</p>
+</li>
+</ol>
 <h3 id="213">2.1.3 与其他系统的对比</h3>
 <p><strong>iOS内核定制</strong>：</p>
 <ul>
 <li>iOS基于XNU（混合内核），包含Mach微内核和BSD层</li>
+<li>内核架构：Mach 3.0微内核 + BSD 4.4内核</li>
+<li>I/O Kit驱动框架：C++面向对象设计</li>
+<li>内核扩展（KEXT）：逐步被系统扩展（System Extensions）替代</li>
 <li>使用Mach端口进行IPC，而非Binder</li>
-<li>Mach消息传递：支持复杂的权限传递和端口权限</li>
+<li>Mach消息传递：支持复杂的权限传递和端口权限<ul>
+<li>Send权限：允许向端口发送消息</li>
+<li>Receive权限：允许从端口接收消息</li>
+<li>Send-once权限：一次性发送权限</li>
+</ul>
+</li>
 <li>性能开销：每次IPC需要内核调度，开销较大</li>
+<li>XPC服务：用户空间的高级封装，提供类型安全</li>
+<li>端口命名服务：bootstrap_server管理全局端口</li>
 <li>内存管理更激进，使用Jetsam机制</li>
-<li>基于优先级带（Priority Bands）的内存回收</li>
-<li>内存压力通知（Memory Pressure Notification）</li>
+<li>基于优先级带（Priority Bands）的内存回收<ul>
+<li>Band划分：前台（10）、音频（15）、后台（20）等</li>
+<li>内存阈值：每个Band有独立的内存限制</li>
+<li>冻结功能：iOS 13+支持应用冻结而非终止</li>
+</ul>
+</li>
+<li>内存压力通知（Memory Pressure Notification）<ul>
+<li>通过dispatch_source监听</li>
+<li>三级压力：normal、warning、critical</li>
+<li>应用可主动释放缓存响应压力</li>
+</ul>
+</li>
 <li>无swap文件，完全依赖物理内存</li>
+<li>内存压缩器：WKdm算法，压缩比约2:1</li>
 <li>安全模型：</li>
-<li>强制代码签名（Mandatory Code Signing）</li>
-<li>沙箱更严格，基于MAC框架</li>
-<li>Secure Enclave处理器集成</li>
+<li>强制代码签名（Mandatory Code Signing）<ul>
+<li>所有代码页必须签名</li>
+<li>运行时验证（AMFI - AppleMobileFileIntegrity）</li>
+<li>证书链验证到Apple根证书</li>
+</ul>
+</li>
+<li>沙箱更严格，基于MAC框架<ul>
+<li>Seatbelt配置文件定义权限</li>
+<li>比Android更细粒度的文件系统隔离</li>
+<li>Mach端口隔离增强安全性</li>
+</ul>
+</li>
+<li>Secure Enclave处理器集成<ul>
+<li>独立的安全协处理器</li>
+<li>硬件密钥存储</li>
+<li>Touch ID/Face ID数据处理</li>
+</ul>
+</li>
 </ul>
 <p><strong>鸿蒙内核设计</strong>：</p>
 <ul>
 <li>支持微内核和宏内核双架构</li>
-<li>LiteOS-A：轻量级内核，用于IoT设备</li>
-<li>Linux内核：兼容Android生态</li>
-<li>未来：自研微内核架构</li>
+<li>LiteOS-A：轻量级内核，用于IoT设备<ul>
+<li>实时性保证：确定性调度延迟</li>
+<li>内存占用：最小128KB RAM</li>
+<li>功耗优化：深度睡眠支持</li>
+</ul>
+</li>
+<li>Linux内核：兼容Android生态<ul>
+<li>基于Linux 4.19/5.10 LTS</li>
+<li>保留Android驱动兼容性</li>
+<li>增加分布式特性支持</li>
+</ul>
+</li>
+<li>未来：自研微内核架构<ul>
+<li>形式化验证：数学证明内核正确性</li>
+<li>时空隔离：硬件级进程隔离</li>
+<li>确定性延迟：实时性能保证</li>
+</ul>
+</li>
 <li>IPC机制基于微内核设计，性能优于传统微内核</li>
-<li>分布式软总线：跨设备透明通信</li>
-<li>RPC性能优化：硬件加速支持</li>
-<li>自动发现和认证机制</li>
-<li>内存管理采用分布式软总线设计</li>
-<li>跨设备内存共享</li>
-<li>智能内存迁移</li>
-<li>AI辅助的内存预测</li>
+<li>分布式软总线：跨设备透明通信<ul>
+<li>自动组网：基于WiFi/蓝牙/NFC</li>
+<li>设备认证：分布式身份管理</li>
+<li>传输优化：根据网络质量自适应</li>
+</ul>
+</li>
+<li>RPC性能优化：硬件加速支持<ul>
+<li>零拷贝传输：DMA直接传输</li>
+<li>批量处理：消息聚合发送</li>
+<li>异步机制：非阻塞调用</li>
+</ul>
+</li>
+<li>自动发现和认证机制<ul>
+<li>mDNS/Bonjour协议支持</li>
+<li>能力协商：自动匹配服务</li>
+<li>安全握手：端到端加密</li>
+</ul>
+</li>
+<li>内存管理采用分布式设计</li>
+<li>跨设备内存共享<ul>
+<li>分布式共享内存（DSM）</li>
+<li>一致性协议：类似MESI</li>
+<li>容错机制：节点故障处理</li>
+</ul>
+</li>
+<li>智能内存迁移<ul>
+<li>基于访问模式的页面迁移</li>
+<li>网络带宽感知调度</li>
+<li>压缩传输优化</li>
+</ul>
+</li>
+<li>AI辅助的内存预测<ul>
+<li>应用行为模式学习</li>
+<li>预测性内存分配</li>
+<li>动态调整策略</li>
+</ul>
+</li>
 </ul>
 <p><strong>Linux桌面/服务器内核</strong>：</p>
 <ul>
 <li>通用性设计，支持广泛硬件</li>
+<li>完整的驱动生态系统</li>
+<li>支持热插拔和动态配置</li>
+<li>NUMA架构优化</li>
 <li>内存管理保守，依赖swap</li>
+<li>多级页表支持（最多5级）</li>
+<li>大页（Huge Pages）支持</li>
+<li>内存热插拔支持</li>
+<li>NUMA感知的内存分配</li>
 <li>调度器公平性优先（CFS）</li>
+<li>O(log n)调度复杂度</li>
+<li>组调度（Control Groups）</li>
+<li>实时调度类支持</li>
+<li>最近的EEVDF调度器改进</li>
 <li>模块化程度高，驱动可动态加载</li>
+<li>内核模块（.ko文件）</li>
+<li>模块依赖自动解析</li>
+<li>模块签名验证（可选）</li>
 </ul>
+<p><strong>关键差异对比表</strong>：</p>
+<p>| 特性 | Android | iOS | 鸿蒙 | Linux |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>Android</th>
+<th>iOS</th>
+<th>鸿蒙</th>
+<th>Linux</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内核类型</td>
+<td>宏内核(Linux)</td>
+<td>混合内核(XNU)</td>
+<td>微/宏双内核</td>
+<td>宏内核</td>
+</tr>
+<tr>
+<td>IPC机制</td>
+<td>Binder</td>
+<td>Mach Port</td>
+<td>分布式软总线</td>
+<td>Socket/Pipe</td>
+</tr>
+<tr>
+<td>内存回收</td>
+<td>LMK/LMKD</td>
+<td>Jetsam</td>
+<td>AI预测</td>
+<td>OOM Killer</td>
+</tr>
+<tr>
+<td>实时性</td>
+<td>软实时</td>
+<td>软实时</td>
+<td>硬实时(部分)</td>
+<td>可选实时</td>
+</tr>
+<tr>
+<td>安全模型</td>
+<td>SELinux</td>
+<td>MAC/Sandbox</td>
+<td>形式化验证</td>
+<td>可选SELinux</td>
+</tr>
+<tr>
+<td>跨设备</td>
+<td>不支持</td>
+<td>部分(Continuity)</td>
+<td>原生支持</td>
+<td>集群方案</td>
+</tr>
+</tbody>
+</table>
 <h2 id="22-lmklmkd">2.2 低内存管理器（LMK/LMKD）</h2>
 <h3 id="221-lmk">2.2.1 LMK工作原理</h3>
 <p>Low Memory Killer是Android处理内存压力的核心机制。它通过以下步骤工作：</p>

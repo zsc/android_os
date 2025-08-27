@@ -331,101 +331,433 @@
 <p>Android源码编译需要强大的硬件支持和特定的软件环境。AOSP官方推荐的最低配置为：</p>
 <ul>
 <li><strong>硬件要求</strong>：</li>
-<li>CPU：64位多核处理器（建议8核以上）</li>
-<li>内存：16GB RAM（建议32GB以上）</li>
-<li>存储：400GB可用空间（完整编译需要）</li>
+<li>CPU：64位多核处理器（建议8核以上，编译时间与核心数成反比）</li>
+<li>内存：16GB RAM（建议32GB以上，64GB对大型项目更佳）</li>
+<li>存储：400GB可用空间（源码约150GB，编译产物250GB）</li>
+<li>操作系统：Ubuntu 20.04 LTS或macOS（部分功能受限）</li>
 <li>
-<p>操作系统：Ubuntu 20.04 LTS或macOS（部分功能受限）</p>
+<p>文件系统：ext4或APFS，不支持NTFS/FAT32</p>
 </li>
 <li>
 <p><strong>软件依赖</strong>：</p>
 </li>
-<li>JDK版本要求随Android版本变化</li>
-<li>Python 3.6+</li>
-<li>必要的编译工具链（gcc, g++, make等）</li>
+<li>JDK版本要求：<ul>
+<li>Android 9+：OpenJDK 9</li>
+<li>Android 8.x：OpenJDK 8</li>
+<li>Android 7.x：OpenJDK 8</li>
+<li>Android 5.x-6.x：OpenJDK 7</li>
 </ul>
-<p>环境初始化通过<code>envsetup.sh</code>完成，该脚本设置了编译所需的环境变量和函数。关键函数包括<code>lunch</code>（选择编译目标）、<code>m</code>（新式编译命令）、<code>mm</code>（模块编译）等。</p>
+</li>
+<li>Python 3.6+（repo工具依赖）</li>
+<li>
+<p>必要的编译工具链：</p>
+<ul>
+<li>gcc-multilib, g++-multilib（32位库支持）</li>
+<li>libxml2-utils, xsltproc（文档生成）</li>
+<li>libssl-dev, libncurses5（系统库）</li>
+<li>flex, bison（解析器生成）</li>
+</ul>
+</li>
+<li>
+<p><strong>环境准备脚本</strong>：</p>
+</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Ubuntu 20.04环境一键配置</span>
+sudo<span class="w"> </span>apt-get<span class="w"> </span>update
+sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>git-core<span class="w"> </span>gnupg<span class="w"> </span>flex<span class="w"> </span>bison<span class="w"> </span>build-essential<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>zip<span class="w"> </span>curl<span class="w"> </span>zlib1g-dev<span class="w"> </span>gcc-multilib<span class="w"> </span>g++-multilib<span class="w"> </span>libc6-dev-i386<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>lib32ncurses5-dev<span class="w"> </span>x11proto-core-dev<span class="w"> </span>libx11-dev<span class="w"> </span>lib32z1-dev<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>libgl1-mesa-dev<span class="w"> </span>libxml2-utils<span class="w"> </span>xsltproc<span class="w"> </span>unzip<span class="w"> </span>fontconfig
+</code></pre></div>
+
+<p>环境初始化通过<code>envsetup.sh</code>完成，该脚本设置了编译所需的环境变量和函数：</p>
+<ul>
+<li><strong>核心环境变量</strong>：</li>
+<li><code>ANDROID_BUILD_TOP</code>：源码根目录</li>
+<li><code>TARGET_PRODUCT</code>：目标产品</li>
+<li><code>TARGET_BUILD_VARIANT</code>：编译变体（user/userdebug/eng）</li>
+<li>
+<p><code>OUT</code>：编译输出目录</p>
+</li>
+<li>
+<p><strong>关键函数功能</strong>：</p>
+</li>
+<li><code>lunch</code>：选择编译目标，格式为product-variant</li>
+<li><code>m</code>：新式编译命令，自动并行编译</li>
+<li><code>mm</code>：编译当前目录模块</li>
+<li><code>mmm</code>：编译指定目录模块</li>
+<li><code>mma</code>：编译当前目录及依赖</li>
+<li><code>croot</code>：快速切换到源码根目录</li>
+<li>
+<p><code>godir</code>：跳转到包含指定文件的目录</p>
+</li>
+<li>
+<p><strong>环境验证</strong>：
+  编译前通过<code>printconfig</code>命令验证环境配置，确保所有变量正确设置。对于CI/CD环境，可通过<code>build/envsetup.sh</code>的非交互模式自动化配置。</p>
+</li>
+</ul>
 <h3 id="_3">源码同步与仓库管理</h3>
 <p>Android使用<code>repo</code>工具管理数百个Git仓库。Repo基于manifest文件定义了各仓库的版本和依赖关系：</p>
 <ul>
-<li><strong>Manifest结构</strong>：</li>
-<li>default.xml定义主分支和远程仓库</li>
-<li>project元素指定每个仓库的路径和分支</li>
+<li><strong>Repo工具架构</strong>：</li>
+<li>Python脚本封装Git操作</li>
+<li>支持大规模多仓库管理</li>
+<li>原子性操作保证一致性</li>
 <li>
-<p>remove-project和add-project用于定制</p>
+<p>内置并行化和断点续传</p>
 </li>
 <li>
-<p><strong>同步策略</strong>：</p>
+<p><strong>Manifest结构详解</strong>：</p>
 </li>
-<li><code>repo sync -j8</code>并行同步提高效率</li>
-<li><code>--current-branch</code>仅同步当前分支</li>
-<li><code>--no-clone-bundle</code>避免使用预打包数据</li>
 </ul>
-<p>与iOS的封闭源码不同，Android的开放性带来了版本管理的复杂性。鸿蒙OS采用了类似的多仓库结构，但在manifest组织上有所优化。</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">&lt;manifest&gt;</span>
+<span class="w">  </span><span class="cm">&lt;!-- 默认配置 --&gt;</span>
+<span class="w">  </span><span class="nt">&lt;default</span><span class="w"> </span><span class="na">revision=</span><span class="s">&quot;refs/tags/android-14.0.0_r1&quot;</span>
+<span class="w">           </span><span class="na">remote=</span><span class="s">&quot;aosp&quot;</span>
+<span class="w">           </span><span class="na">sync-j=</span><span class="s">&quot;4&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+
+<span class="w">  </span><span class="cm">&lt;!-- 远程仓库定义 --&gt;</span>
+<span class="w">  </span><span class="nt">&lt;remote</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;aosp&quot;</span>
+<span class="w">          </span><span class="na">fetch=</span><span class="s">&quot;https://android.googlesource.com&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+
+<span class="w">  </span><span class="cm">&lt;!-- 项目定义 --&gt;</span>
+<span class="w">  </span><span class="nt">&lt;project</span><span class="w"> </span><span class="na">path=</span><span class="s">&quot;frameworks/base&quot;</span>
+<span class="w">           </span><span class="na">name=</span><span class="s">&quot;platform/frameworks/base&quot;</span>
+<span class="w">           </span><span class="na">groups=</span><span class="s">&quot;pdk&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+
+<span class="w">  </span><span class="cm">&lt;!-- 本地manifest定制 --&gt;</span>
+<span class="w">  </span><span class="nt">&lt;remove-project</span><span class="w"> </span><span class="na">name=</span><span class="s">&quot;platform/packages/apps/Camera2&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;project</span><span class="w"> </span><span class="na">path=</span><span class="s">&quot;packages/apps/Camera2&quot;</span>
+<span class="w">           </span><span class="na">name=</span><span class="s">&quot;vendor/custom/camera&quot;</span>
+<span class="w">           </span><span class="na">remote=</span><span class="s">&quot;vendor&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/manifest&gt;</span>
+</code></pre></div>
+
+<ul>
+<li><strong>同步策略优化</strong>：</li>
+<li><code>repo sync -j8</code>：8线程并行同步</li>
+<li><code>--current-branch</code>：仅同步当前分支，节省空间</li>
+<li><code>--no-clone-bundle</code>：避免预打包数据，获取最新</li>
+<li><code>--force-sync</code>：强制同步，解决冲突</li>
+<li><code>--optimized-fetch</code>：使用协议v2，提升效率</li>
+<li>
+<p><code>-c</code>：仅同步当前分支，减少下载量</p>
+</li>
+<li>
+<p><strong>镜像管理</strong>：</p>
+</li>
+<li>本地镜像创建：<code>repo init --mirror</code></li>
+<li>镜像同步：<code>repo sync --force-sync</code></li>
+<li>参考镜像：<code>--reference</code>加速初始化</li>
+<li>
+<p>浅克隆：<code>--depth=1</code>减少历史数据</p>
+</li>
+<li>
+<p><strong>分支管理策略</strong>：</p>
+</li>
+<li>Topic分支：<code>repo start &lt;topic&gt; &lt;projects&gt;</code></li>
+<li>批量操作：<code>repo forall -c 'git command'</code></li>
+<li>状态查看：<code>repo status</code>显示所有改动</li>
+<li>
+<p>上传评审：<code>repo upload</code>提交到Gerrit</p>
+</li>
+<li>
+<p><strong>与其他系统对比</strong>：</p>
+</li>
+<li><strong>iOS</strong>：单一仓库，访问受限，版本不透明</li>
+<li><strong>鸿蒙OS</strong>：改进manifest组织，增加模块化管理</li>
+<li>
+<p><strong>Linux内核</strong>：单仓库+子模块，更简单但灵活性差</p>
+</li>
+<li>
+<p><strong>常见问题处理</strong>：</p>
+</li>
+<li>同步中断恢复：自动从断点继续</li>
+<li>仓库损坏修复：<code>repo sync --force-sync</code></li>
+<li>空间清理：<code>repo prune</code>删除已合并分支</li>
+<li>切换manifest分支：重新init指定分支</li>
+</ul>
 <h3 id="_4">编译系统架构剖析</h3>
 <p>Android编译系统经历了从Make到Soong的演进：</p>
 <ul>
 <li><strong>Make时代（Android 6.0前）</strong>：</li>
 <li>基于GNU Make的递归构建</li>
-<li>Android.mk定义模块</li>
+<li>Android.mk定义模块，语法复杂</li>
+<li>编译速度慢，依赖关系难以管理</li>
 <li>
-<p>编译速度慢，依赖关系复杂</p>
+<p>增量编译不可靠，经常需要clean build</p>
 </li>
 <li>
 <p><strong>Soong/Blueprint（Android 7.0+）</strong>：</p>
 </li>
 <li>基于Go语言的新构建系统</li>
-<li>Android.bp使用JSON-like语法</li>
-<li>
-<p>并行化程度高，增量编译优化</p>
-</li>
-<li>
-<p><strong>Bazel试验（Android 13+）</strong>：</p>
-</li>
+<li>Android.bp使用JSON-like语法，类型安全</li>
+<li>并行化程度高，增量编译优化</li>
+<li>模块化设计，支持插件扩展</li>
+<li>示例对比：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="c"># Android.mk (旧)</span>
+<span class="nv">LOCAL_PATH</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">$(</span>call<span class="w"> </span>my-dir<span class="k">)</span>
+<span class="cp">include $(CLEAR_VARS)</span>
+<span class="nv">LOCAL_MODULE</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span>libexample
+<span class="nv">LOCAL_SRC_FILES</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span>example.cpp
+<span class="nv">LOCAL_SHARED_LIBRARIES</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span>liblog
+<span class="cp">include $(BUILD_SHARED_LIBRARY)</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="err">```</span><span class="nx">json</span>
+<span class="c1">// Android.bp (新)</span>
+<span class="nx">cc_library_shared</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;libexample&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">srcs</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;example.cpp&quot;</span><span class="p">],</span>
+<span class="w">    </span><span class="nx">shared_libs</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;liblog&quot;</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="err">```</span>
+</code></pre></div>
+
+<ul>
+<li><strong>Bazel试验（Android 13+）</strong>：</li>
 <li>Google内部使用的构建系统</li>
 <li>支持远程缓存和分布式编译</li>
 <li>与Soong并存，逐步迁移</li>
+<li>
+<p>更好的跨平台支持</p>
+</li>
+<li>
+<p><strong>混合构建系统</strong>：</p>
+</li>
+<li>Android.mk通过Kati转换为ninja</li>
+<li>Android.bp通过Soong生成ninja</li>
+<li>Bazel规则逐步引入</li>
+<li>统一由Ninja执行实际构建</li>
 </ul>
 <p>编译流程的核心步骤：</p>
 <ol>
-<li><strong>Kati阶段</strong>：将Android.mk转换为ninja文件</li>
-<li><strong>Soong阶段</strong>：处理Android.bp生成ninja文件  </li>
-<li><strong>Ninja执行</strong>：实际的编译链接过程</li>
-<li><strong>打包阶段</strong>：生成system.img等镜像文件</li>
+<li>
+<p><strong>环境准备阶段</strong>：
+   - 执行<code>source build/envsetup.sh</code>
+   - 选择编译目标<code>lunch &lt;target&gt;</code>
+   - 设置OUT目录和编译变量</p>
+</li>
+<li>
+<p><strong>Kati阶段</strong>（处理Android.mk）：
+   - 解析所有Android.mk文件
+   - 构建模块依赖图
+   - 生成build-<target>.ninja文件
+   - 处理遗留的Make变量和函数</p>
+</li>
+<li>
+<p><strong>Soong阶段</strong>（处理Android.bp）：
+   - Blueprint解析.bp文件为Go结构体
+   - Soong处理模块依赖和变体
+   - 生成build.ninja文件
+   - 优化并行编译策略</p>
+</li>
+<li>
+<p><strong>Ninja执行阶段</strong>：
+   - 读取所有.ninja文件
+   - 构建完整依赖图
+   - 并行执行编译任务
+   - 支持增量编译</p>
+</li>
+<li>
+<p><strong>打包阶段</strong>：
+   - 生成各分区镜像：</p>
+<ul>
+<li>system.img：系统分区</li>
+<li>vendor.img：厂商定制</li>
+<li>boot.img：内核和ramdisk</li>
+<li>userdata.img：用户数据</li>
+<li>生成OTA更新包</li>
+<li>创建fastboot刷机包</li>
+</ul>
+</li>
 </ol>
+<ul>
+<li><strong>编译产物组织</strong>：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>out/target/product/&lt;device&gt;/
+├── obj/           # 中间编译产物
+├── symbols/       # 带调试符号的二进制
+├── system/        # system分区内容
+├── vendor/        # vendor分区内容
+├── <span class="gs">*.img          # 各分区镜像</span>
+<span class="gs">└── *</span>.zip          # OTA/刷机包
+</code></pre></div>
+
 <h3 id="_5">编译优化与加速技术</h3>
 <p>大型Android项目的编译优化至关重要：</p>
 <ul>
-<li><strong>ccache使用</strong>：</li>
-<li>缓存C/C++编译结果</li>
-<li>可将重编译时间缩短50%以上</li>
-<li>
-<p>需要合理设置缓存大小和策略</p>
-</li>
-<li>
-<p><strong>分布式编译</strong>：</p>
-</li>
-<li>Goma：Google的分布式编译服务</li>
-<li>distcc：开源分布式编译方案</li>
-<li>
-<p>需要解决依赖同步问题</p>
-</li>
-<li>
-<p><strong>增量编译优化</strong>：</p>
-</li>
-<li>精确的依赖追踪</li>
-<li>模块边界优化</li>
-<li>
-<p>避免不必要的重新链接</p>
-</li>
-<li>
-<p><strong>构建缓存</strong>：</p>
-</li>
-<li>本地artifact缓存</li>
-<li>远程缓存服务器</li>
-<li>容器化编译环境</li>
+<li><strong>ccache使用与配置</strong>：</li>
+<li>缓存C/C++编译结果，支持GCC和Clang</li>
+<li>可将重编译时间缩短50-70%</li>
+<li>优化配置：</li>
 </ul>
-<p>与iOS的Xcode编译相比，Android的编译系统更加开放但也更复杂。鸿蒙的编译系统借鉴了Android的经验，但在模块化和缓存机制上有所改进。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 设置缓存大小（建议50GB+）</span>
+ccache<span class="w"> </span>-M<span class="w"> </span>50G
+
+<span class="c1"># 启用压缩节省空间</span>
+ccache<span class="w"> </span>--set-config<span class="w"> </span><span class="nv">compression</span><span class="o">=</span><span class="nb">true</span>
+ccache<span class="w"> </span>--set-config<span class="w"> </span><span class="nv">compression_level</span><span class="o">=</span><span class="m">6</span>
+
+<span class="c1"># 设置最大文件大小</span>
+ccache<span class="w"> </span>--set-config<span class="w"> </span><span class="nv">max_size</span><span class="o">=</span>100M
+
+<span class="c1"># Android编译集成</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">USE_CCACHE</span><span class="o">=</span><span class="m">1</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CCACHE_DIR</span><span class="o">=</span>/path/to/ccache
+</code></pre></div>
+
+<ul>
+<li>
+<p>缓存命中率监控：<code>ccache -s</code>查看统计</p>
+</li>
+<li>
+<p><strong>分布式编译方案</strong>：</p>
+</li>
+<li>
+<p><strong>Goma（Google内部）</strong>：</p>
+<ul>
+<li>客户端-服务器架构</li>
+<li>支持增量编译缓存</li>
+<li>自动负载均衡</li>
+<li>需要专用编译集群</li>
+</ul>
+</li>
+<li>
+<p><strong>distcc（开源方案）</strong>：</p>
+<ul>
+<li>配置示例：</li>
+</ul>
+</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">DISTCC_HOSTS</span><span class="o">=</span><span class="s2">&quot;host1/8 host2/8 host3/8&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CC</span><span class="o">=</span><span class="s2">&quot;distcc gcc&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CXX</span><span class="o">=</span><span class="s2">&quot;distcc g++&quot;</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>- 网络带宽要求高
+- 需要同步工具链版本
+</code></pre></div>
+
+<ul>
+<li>
+<p><strong>Bazel Remote Execution</strong>：</p>
+<ul>
+<li>支持远程执行和缓存</li>
+<li>与Bazel构建系统集成</li>
+<li>可扩展到云端</li>
+</ul>
+</li>
+<li>
+<p><strong>增量编译优化策略</strong>：</p>
+</li>
+<li>
+<p><strong>依赖精确追踪</strong>：</p>
+<ul>
+<li>Ninja的depfile机制</li>
+<li>头文件依赖自动分析</li>
+<li>避免过度依赖传播</li>
+</ul>
+</li>
+<li>
+<p><strong>模块边界设计</strong>：</p>
+<ul>
+<li>合理划分静态/动态库</li>
+<li>减少模块间耦合</li>
+<li>使用pimpl减少重编译</li>
+</ul>
+</li>
+<li>
+<p><strong>链接优化</strong>：</p>
+<ul>
+<li>增量链接（gold linker）</li>
+<li>ThinLTO跨模块优化</li>
+<li>并行链接任务</li>
+</ul>
+</li>
+<li>
+<p><strong>构建缓存架构</strong>：</p>
+</li>
+<li>
+<p><strong>本地缓存</strong>：</p>
+<ul>
+<li>对象文件缓存</li>
+<li>预编译头文件</li>
+<li>模块构建结果</li>
+</ul>
+</li>
+<li>
+<p><strong>远程缓存服务</strong>：</p>
+<ul>
+<li>基于内容哈希的存储</li>
+<li>支持S3/GCS后端</li>
+<li>缓存预热策略</li>
+</ul>
+</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>Build Cache Architecture:
+Developer → Local Cache → Remote Cache → Build Farm
+                ↓              ↓              ↓
+             ~/.cache    S3/Redis      Distributed
+</code></pre></div>
+
+<ul>
+<li>
+<p><strong>容器化编译</strong>：</p>
+<ul>
+<li>Docker镜像固定环境</li>
+<li>可重现的构建结果</li>
+<li>易于扩展和迁移</li>
+</ul>
+</li>
+<li>
+<p><strong>并行化优化</strong>：</p>
+</li>
+<li><strong>CPU核心利用</strong>：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 自动检测核心数</span>
+m<span class="w"> </span>-j<span class="k">$(</span>nproc<span class="k">)</span>
+
+<span class="c1"># 预留系统资源</span>
+m<span class="w"> </span>-j<span class="k">$(($(</span>nproc<span class="k">)</span><span class="o">-</span><span class="m">2</span><span class="k">))</span>
+</code></pre></div>
+
+<ul>
+<li>
+<p><strong>内存管理</strong>：</p>
+<ul>
+<li>限制并行任务防止OOM</li>
+<li>使用zram增加可用内存</li>
+<li>监控swap使用情况</li>
+</ul>
+</li>
+<li>
+<p><strong>性能分析工具</strong>：</p>
+</li>
+<li>
+<p><strong>编译时间分析</strong>：</p>
+<ul>
+<li><code>soong_ui --trace</code>生成trace文件</li>
+<li>Chrome追踪查看器分析</li>
+<li>识别编译瓶颈</li>
+</ul>
+</li>
+<li>
+<p><strong>依赖关系可视化</strong>：</p>
+<ul>
+<li><code>m blueprint_tools</code>生成依赖图</li>
+<li>graphviz渲染分析</li>
+<li>优化模块结构</li>
+</ul>
+</li>
+</ul>
+<p>与iOS的Xcode编译相比，Android的编译系统更加开放但也更复杂。鸿蒙的编译系统借鉴了Android的经验，但在模块化和缓存机制上有所改进，特别是：</p>
+<ul>
+<li>更细粒度的模块划分</li>
+<li>内置的分布式编译支持</li>
+<li>统一的构建缓存管理</li>
+</ul>
 <h2 id="_6">设备树配置</h2>
 <h3 id="device-tree">Device Tree基础概念</h3>
 <p>Android的设备配置体系与Linux内核的Device Tree有本质区别：</p>

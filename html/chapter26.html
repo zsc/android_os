@@ -297,117 +297,571 @@
 <p>Android虚拟化技术是系统安全和功能隔离的基石。从早期简单的UID隔离到现代复杂的容器化架构，Android在虚拟化道路上不断演进。本章将深入剖析Android虚拟化技术栈，包括容器化应用、多用户系统、工作资料机制以及相关的安全增强措施。通过与iOS等系统的对比，我们将全面理解Android虚拟化的设计理念和实现细节。</p>
 <h2 id="261">26.1 容器化技术应用</h2>
 <h3 id="2611-android">26.1.1 Android容器化基础架构</h3>
-<p>Android的容器化技术建立在Linux内核的Namespace和Cgroup机制之上，但针对移动场景做了大量优化和定制。</p>
+<p>Android的容器化技术建立在Linux内核的Namespace和Cgroup机制之上，但针对移动场景做了大量优化和定制。与传统服务器容器化不同，Android需要在有限的硬件资源下实现高效的应用隔离，同时保持良好的用户体验。</p>
 <p><strong>Namespace隔离层次</strong>：</p>
 <ul>
-<li>PID Namespace：每个应用拥有独立的进程空间</li>
-<li>Mount Namespace：隔离文件系统视图</li>
-<li>Network Namespace：网络栈隔离（部分场景）</li>
-<li>User Namespace：UID/GID映射（Android 10+）</li>
-<li>UTS Namespace：主机名隔离</li>
-<li>IPC Namespace：SystemV IPC隔离</li>
+<li>PID Namespace：每个应用拥有独立的进程空间，pid 1在应用内部视角是其主进程</li>
+<li>Mount Namespace：隔离文件系统视图，实现私有存储和动态权限</li>
+<li>Network Namespace：网络栈隔离，主要用于VPN和网络调试场景</li>
+<li>User Namespace：UID/GID映射（Android 10+），增强权限隔离</li>
+<li>UTS Namespace：主机名隔离，较少使用但提供完整性</li>
+<li>IPC Namespace：SystemV IPC隔离，防止共享内存滥用</li>
 </ul>
-<p>Android通过<code>clone()</code>系统调用的<code>CLONE_NEW*</code>标志创建新的namespace：</p>
+<p>Android通过<code>clone()</code>系统调用的<code>CLONE_NEW*</code>标志创建新的namespace，具体实现在<code>frameworks/base/core/jni/com_android_internal_os_Zygote.cpp</code>：</p>
 <ul>
-<li>Zygote fork时设置<code>CLONE_NEWNS</code></li>
-<li>特权应用可能使用<code>CLONE_NEWNET</code></li>
-<li>隔离进程使用<code>CLONE_NEWPID</code></li>
+<li>Zygote fork时设置<code>CLONE_NEWNS</code>实现挂载隔离</li>
+<li>VPN应用通过<code>CLONE_NEWNET</code>创建独立网络栈</li>
+<li>隔离进程使用<code>CLONE_NEWPID</code>完全隔离进程视图</li>
+<li>WebView渲染进程额外使用<code>CLONE_NEWIPC</code></li>
 </ul>
+<p><strong>Namespace创建时机</strong>：</p>
+<div class="codehilite"><pre><span></span><code>应用启动流程中的Namespace设置：
+
+1. Zygote收到启动请求（通过socket）
+2. 调用forkAndSpecialize()
+3. 设置namespace标志位
+4. clone()创建新进程
+5. 在子进程中设置UID/GID
+6. 执行应用代码
+</code></pre></div>
+
 <p><strong>Cgroup资源控制</strong>：
-Android使用Cgroup v1进行资源管理：</p>
+Android使用Cgroup v1进行资源管理，在init.rc中配置：</p>
 <ul>
-<li>cpu：CPU时间片分配</li>
-<li>cpuset：CPU亲和性设置</li>
-<li>memory：内存限制和统计</li>
-<li>blkio：块设备I/O限制</li>
-<li>freezer：进程冻结/解冻</li>
+<li>cpu：CPU时间片分配，支持前台/后台差异化</li>
+<li>cpuset：CPU亲和性设置，大小核调度优化</li>
+<li>memory：内存限制和统计，配合LMK/LMKD</li>
+<li>blkio：块设备I/O限制，应用存储配额</li>
+<li>freezer：进程冻结/解冻，Doze模式实现</li>
 </ul>
-<p>关键cgroup路径：</p>
+<p>关键cgroup路径和配置：</p>
 <ul>
 <li><code>/dev/cpuctl/</code>：CPU控制组</li>
+<li><code>tasks</code>：进程列表</li>
+<li><code>cpu.shares</code>：CPU份额（默认1024）</li>
+<li><code>cpu.rt_runtime_us</code>：实时调度时间</li>
 <li><code>/dev/cpuset/</code>：CPU集合控制</li>
+<li><code>foreground/cpus</code>：前台应用CPU集合</li>
+<li><code>background/cpus</code>：后台应用CPU集合</li>
+<li><code>system-background/cpus</code>：系统后台CPU集合</li>
 <li><code>/dev/memcg/</code>：内存控制组</li>
+<li><code>memory.limit_in_bytes</code>：内存上限</li>
+<li><code>memory.soft_limit_in_bytes</code>：软限制</li>
+<li><code>memory.swappiness</code>：交换倾向</li>
 <li><code>/dev/blkio/</code>：块I/O控制</li>
+<li><code>blkio.weight</code>：I/O权重（100-1000）</li>
+<li><code>blkio.throttle.read_bps_device</code>：读取限速</li>
 </ul>
+<p><strong>Cgroup层次结构</strong>：
+Android定义了多个cgroup组，通过<code>libprocessgroup</code>管理：</p>
+<ul>
+<li><code>/</code>: 根cgroup</li>
+<li><code>/foreground</code>: 前台应用组</li>
+<li><code>/background</code>: 后台应用组</li>
+<li><code>/system-background</code>: 系统后台服务</li>
+<li><code>/top-app</code>: 当前活跃应用（Android 10+）</li>
+<li><code>/restricted</code>: 受限应用组（Android 11+）</li>
+</ul>
+<p><strong>性能调优配置</strong>：
+<code>system/core/libprocessgroup/profiles/task_profiles.json</code>定义了任务配置文件：</p>
+<ul>
+<li>HighPerformance：性能模式，大核运行</li>
+<li>PowerEfficient：省电模式，小核运行</li>
+<li>SystemBackground：系统后台，限制资源</li>
+<li>ProcessCapacityHigh：高处理能力</li>
+<li>ProcessCapacityLow：低处理能力</li>
+</ul>
+<p>通过<code>SetTaskProfiles()</code>和<code>SetProcessProfiles()</code> API应用这些配置。</p>
 <h3 id="2612-app">26.1.2 App沙箱与进程隔离机制</h3>
-<p>Android的应用沙箱是其安全模型的核心，每个应用运行在独立的Linux用户下。</p>
+<p>Android的应用沙箱是其安全模型的核心，每个应用运行在独立的Linux用户下。这种设计利用了Linux的DAC（Discretionary Access Control）机制，并通过额外的安全层进行增强。</p>
 <p><strong>UID分配机制</strong>：</p>
 <ul>
 <li>应用UID范围：10000-19999（AID_APP_START到AID_APP_END）</li>
+<li>普通应用：动态分配，安装时确定</li>
+<li>共享UID：相同签名应用可共享（已废弃）</li>
 <li>隔离进程UID：99000-99999（AID_ISOLATED_START到AID_ISOLATED_END）</li>
+<li>WebView渲染进程</li>
+<li>媒体提取服务</li>
+<li>其他高风险操作</li>
 <li>系统UID：1000-9999（预定义系统服务）</li>
+<li>system(1000)：系统服务器</li>
+<li>radio(1001)：电话相关</li>
+<li>bluetooth(1002)：蓝牙服务</li>
+<li>graphics(1003)：图形系统</li>
+<li>input(1004)：输入系统</li>
 </ul>
+<p><strong>UID分配实现</strong>：
+<code>PackageManagerService</code>在应用安装时分配UID：</p>
+<div class="codehilite"><pre><span></span><code><span class="nx">流程</span><span class="err">：</span>
+
+<span class="mi">1</span><span class="p">.</span><span class="w"> </span><span class="nx">检查是否为更新安装</span><span class="err">（</span><span class="nx">保持原UID</span><span class="err">）</span>
+<span class="mi">2</span><span class="p">.</span><span class="w"> </span><span class="nx">查找共享UID</span><span class="err">（</span><span class="nx">如果声明</span><span class="err">）</span>
+<span class="mi">3</span><span class="p">.</span><span class="w"> </span><span class="nx">从mFirstAvailableUid开始分配新UID</span>
+<span class="mi">4</span><span class="p">.</span><span class="w"> </span><span class="nx">更新packages</span><span class="p">.</span><span class="nx">xml持久化</span>
+</code></pre></div>
+
 <p><strong>文件系统隔离</strong>：</p>
 <ul>
 <li>私有数据目录：<code>/data/data/&lt;package_name&gt;/</code></li>
+<li><code>files/</code>：getFilesDir()返回</li>
+<li><code>databases/</code>：SQLite数据库</li>
+<li><code>shared_prefs/</code>：SharedPreferences</li>
+<li><code>cache/</code>：getCacheDir()返回</li>
+<li><code>code_cache/</code>：JIT代码缓存</li>
 <li>外部存储隔离：<code>/storage/emulated/&lt;userId&gt;/&lt;package_name&gt;/</code></li>
+<li>Android 10起的分区存储（Scoped Storage）</li>
+<li>MediaStore API访问共享媒体</li>
+<li>SAF（Storage Access Framework）授权访问</li>
 <li>OBB挂载点：<code>/mnt/obb/&lt;package_name&gt;/</code></li>
+<li>扩展文件存储</li>
+<li>FUSE文件系统实现</li>
+<li>应用专属目录权限：</li>
+<li>内部存储：700（仅所有者）</li>
+<li>外部存储：基于FUSE动态控制</li>
 </ul>
 <p><strong>进程隔离增强</strong>：</p>
 <ul>
 <li>Seccomp-BPF：限制系统调用</li>
+<li>白名单模式：仅允许必要调用</li>
+<li>架构相关过滤：arm64/arm32差异</li>
+<li>性能优化：BPF JIT编译</li>
 <li>SELinux域：<code>u:r:untrusted_app:s0</code></li>
+<li>MLS级别：基于targetSdkVersion</li>
+<li>类别集：基于应用UID计算</li>
+<li>访问向量：严格限制文件和IPC</li>
 <li>能力(Capabilities)剥离：<code>capset()</code>清空能力集</li>
+<li>应用进程无任何Linux capabilities</li>
+<li>特权操作通过系统服务代理</li>
+<li>防止权限提升攻击</li>
+</ul>
+<p><strong>沙箱初始化流程</strong>：
+<code>ActivityThread</code>启动时的沙箱设置：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">Zygote</span><span class="w"> </span><span class="kr">for</span><span class="n">k新进程</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">设置进程UID</span><span class="o">/</span><span class="n">GID</span><span class="err">（</span><span class="n">setuid</span><span class="o">/</span><span class="n">setgid</span><span class="err">）</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">设置补充组</span><span class="err">（</span><span class="n">setgroups</span><span class="err">）</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">切换SELinux上下文</span><span class="err">（</span><span class="n">setcon</span><span class="err">）</span>
+<span class="mf">5.</span><span class="w"> </span><span class="n">应用Seccomp过滤器</span>
+<span class="mf">6.</span><span class="w"> </span><span class="n">关闭不需要的文件描述符</span>
+<span class="mf">7.</span><span class="w"> </span><span class="n">设置进程优先级和调度策略</span>
+</code></pre></div>
+
+<p><strong>内存隔离机制</strong>：</p>
+<ul>
+<li>ASLR（地址空间布局随机化）</li>
+<li>栈、堆、库加载地址随机</li>
+<li>mmap基址随机化</li>
+<li>PIE（Position Independent Executables）</li>
+<li>堆保护</li>
+<li>堆块元数据加密</li>
+<li>双向链表完整性检查</li>
+<li>随机化分配器（jemalloc/scudo）</li>
+<li>栈保护</li>
+<li>栈金丝雀（Stack Canaries）</li>
+<li>栈不可执行（NX bit）</li>
+<li>影子栈（Shadow Stack，硬件支持时）</li>
 </ul>
 <h3 id="2613-android-runtime-namespace-art-ns">26.1.3 Android Runtime Namespace (ART NS)</h3>
-<p>ART虚拟机层面的隔离机制提供了额外的安全保障。</p>
+<p>ART虚拟机层面的隔离机制提供了额外的安全保障。这层隔离不仅保护Java/Kotlin代码，还管理native代码的加载和执行，形成完整的运行时安全体系。</p>
 <p><strong>ClassLoader隔离</strong>：</p>
 <ul>
 <li>PathClassLoader：应用类加载</li>
+<li>加载已安装APK中的类</li>
+<li>继承自BaseDexClassLoader</li>
+<li>不支持从任意路径加载</li>
 <li>DexClassLoader：动态加载</li>
+<li>支持从文件系统加载DEX/JAR</li>
+<li>需要指定优化目录</li>
+<li>常用于插件化框架</li>
 <li>InMemoryDexClassLoader：内存DEX加载（Android 8.0+）</li>
+<li>直接从ByteBuffer加载</li>
+<li>不落盘，增强安全性</li>
+<li>适用于动态代码生成</li>
+<li>DelegateLastClassLoader：委托末尾加载器（Android 8.0+）</li>
+<li>优先查找自己的类</li>
+<li>用于解决类冲突</li>
+<li>支持隔离的类空间</li>
 </ul>
-<p><strong>JNI命名空间</strong>：</p>
+<p><strong>ClassLoader层次结构</strong>：</p>
+<div class="codehilite"><pre><span></span><code>BootClassLoader (系统类)
+    ↓
+SystemClassLoader (框架扩展)
+    ↓
+PathClassLoader (应用类)
+    ↓
+自定义ClassLoader (动态加载)
+</code></pre></div>
+
+<p><strong>JNI命名空间</strong>：
+Native库加载通过linker命名空间实现隔离：</p>
 <ul>
 <li>公共命名空间：系统库</li>
+<li><code>/system/lib64/</code>：系统native库</li>
+<li><code>/apex/*/lib64/</code>：APEX模块库</li>
+<li>导出符号表控制可见性</li>
 <li>应用命名空间：私有native库</li>
+<li><code>/data/app/*/lib/</code>：应用私有库</li>
+<li>隔离符号表，防止冲突</li>
+<li>限制dlopen路径</li>
 <li>Vendor命名空间：厂商HAL库</li>
+<li><code>/vendor/lib64/</code>：厂商实现</li>
+<li><code>/odm/lib64/</code>：ODM定制</li>
+<li>VNDK版本控制</li>
+<li>Runtime命名空间：ART专用</li>
+<li><code>libart.so</code>及其依赖</li>
+<li>JNI检查和调试库</li>
+<li>性能分析库</li>
 </ul>
 <p>通过<code>android_dlopen_ext()</code>控制库搜索路径：</p>
 <ul>
 <li><code>ANDROID_DLEXT_USE_NAMESPACE</code>：指定命名空间</li>
 <li><code>ANDROID_DLEXT_USE_LIBRARY_FD</code>：直接使用文件描述符</li>
+<li><code>ANDROID_DLEXT_USE_RELRO</code>：共享RELRO段</li>
+<li><code>ANDROID_DLEXT_FORCE_LOAD</code>：强制重新加载</li>
 </ul>
+<p><strong>命名空间配置</strong>：
+<code>/system/etc/ld.config.*.txt</code>定义命名空间规则：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">[应用命名空间配置示例]</span>
+<span class="na">namespace.default.isolated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">true</span>
+<span class="na">namespace.default.search.paths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">/data/app/${APP}/${APP}/lib/${ABI}</span>
+<span class="na">namespace.default.permitted.paths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">/data</span>
+<span class="na">namespace.default.links</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">system,vndk</span>
+</code></pre></div>
+
+<p><strong>JNI安全检查</strong>：
+ART运行时提供多层JNI安全检查：</p>
+<ul>
+<li>CheckJNI模式：开发时参数验证</li>
+<li>验证JNI调用参数</li>
+<li>检查引用有效性</li>
+<li>监测内存越界</li>
+<li>JNI本地引用表：防止泄露</li>
+<li>默认512个槽位</li>
+<li>自动清理机制</li>
+<li>溢出检测</li>
+<li>JNI全局引用限制</li>
+<li>默认51200个全局引用</li>
+<li>弱全局引用单独计数</li>
+<li>防止内存泄露</li>
+</ul>
+<p><strong>方法解析隔离</strong>：</p>
+<ul>
+<li>dex2oat编译隔离</li>
+<li>每个应用独立编译</li>
+<li>验证DEX文件完整性</li>
+<li>Profile引导优化（PGO）</li>
+<li>方法内联限制</li>
+<li>跨包边界不内联</li>
+<li>保持调用栈完整性</li>
+<li>Hidden API访问控制</li>
+</ul>
+<p><strong>Hidden API访问控制</strong>：
+Android 9起限制非SDK接口访问：</p>
+<ul>
+<li>白名单：公开SDK接口</li>
+<li>浅灰名单：targetSdk &lt; 28可用</li>
+<li>深灰名单：特定版本可用</li>
+<li>黑名单：完全禁止访问</li>
+</ul>
+<p>访问检查实现：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">运行时通过访问标志检查</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">反射调用额外验证</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">JNI调用路径检查</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">豁免机制</span><span class="err">（</span><span class="n">系统应用等</span><span class="err">）</span>
+</code></pre></div>
+
 <h3 id="2614">26.1.4 容器化网络隔离</h3>
-<p>Android的网络隔离主要通过UID-based防火墙规则实现。</p>
-<p><strong>Netfilter/iptables规则</strong>：</p>
+<p>Android的网络隔离主要通过UID-based防火墙规则实现，这是一种独特的设计，不同于传统Linux的基于进程或namespace的网络隔离。</p>
+<p><strong>Netfilter/iptables规则架构</strong>：
+Android使用定制的iptables规则链：</p>
 <ul>
 <li>INPUT链：基于UID的入站控制</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>Chain INPUT
+-A INPUT -j bw_INPUT      # 带宽统计
+-A INPUT -j fw_INPUT      # 防火墙规则
+-A INPUT -m owner --uid-owner 0 -j ACCEPT  # root访问
+</code></pre></div>
+
+<ul>
 <li>OUTPUT链：应用出站流量控制</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>Chain OUTPUT
+-A OUTPUT -j oem_out      # OEM定制规则
+-A OUTPUT -j fw_OUTPUT    # 防火墙输出
+-A OUTPUT -j st_OUTPUT    # 流量统计
+-A OUTPUT -j bw_OUTPUT    # 带宽控制
+</code></pre></div>
+
+<ul>
 <li>nat表：网络地址转换</li>
+<li>热点共享NAT</li>
+<li>VPN重定向</li>
+<li>IPv6到IPv4转换</li>
 <li>mangle表：包标记和修改</li>
+<li>QoS标记</li>
+<li>路由标记</li>
+<li>TTL调整</li>
 </ul>
 <p><strong>网络权限映射</strong>：</p>
 <ul>
 <li>INTERNET权限：允许网络访问</li>
-<li>特定UID范围：VPN应用（AID_VPN）</li>
-<li>系统应用：绕过某些限制</li>
+<li>检查在<code>NetworkManagementService</code></li>
+<li>无此权限的应用被DROP</li>
+<li>通过iptables uid-owner模块实现</li>
+<li>特定UID范围：</li>
+<li>VPN应用（AID_VPN=1016）</li>
+<li>DNS解析（AID_DNS=1051）</li>
+<li>网络栈（AID_NETWORK_STACK=1073）</li>
+<li>系统应用特权：</li>
+<li>绕过计量限制</li>
+<li>后台数据访问</li>
+<li>特定端口绑定</li>
 </ul>
-<p><strong>eBPF网络程序</strong>（Android 9+）：</p>
+<p><strong>eBPF网络程序</strong>（Android 9+）：
+eBPF替代iptables实现高性能网络控制：</p>
 <ul>
 <li>流量统计：<code>BPF_PROG_TYPE_CGROUP_SKB</code></li>
+</ul>
+<div class="codehilite"><pre><span></span><code>位置：/sys/fs/bpf/netd_shared/prog_netd_skfilter_*
+功能：
+
+<span class="k">-</span> per-UID流量统计
+<span class="k">-</span> per-tag流量分组
+<span class="k">-</span> 实时流量监控
+</code></pre></div>
+
+<ul>
 <li>流量控制：<code>BPF_PROG_TYPE_CGROUP_SOCK</code></li>
+</ul>
+<div class="codehilite"><pre><span></span><code>功能：
+
+- 限制socket创建
+- 端口访问控制
+- 协议类型限制
+</code></pre></div>
+
+<ul>
 <li>性能监控：<code>BPF_PROG_TYPE_TRACEPOINT</code></li>
 </ul>
-<h3 id="2615-linux">26.1.5 与Linux容器技术的差异</h3>
-<p>Android容器化与传统Linux容器（如Docker）存在显著差异：</p>
-<p><strong>设计目标差异</strong>：</p>
+<div class="codehilite"><pre><span></span><code>监控点：
+
+- TCP连接建立/断开
+- 丢包统计
+- 延迟测量
+</code></pre></div>
+
+<p><strong>eBPF Map结构</strong>：</p>
+<div class="codehilite"><pre><span></span><code>cookie_tag_map：应用标签映射
+uid_counter_map：UID流量计数器
+app_uid_stats_map：应用统计信息
+iface_stats_map：接口统计
+</code></pre></div>
+
+<p><strong>网络隔离实现细节</strong>：</p>
+<ol>
+<li><strong>Socket权限检查</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">inet_create</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">check_net_admin_capability</span><span class="p">()</span>
+
+<span class="mf">1.</span><span class="w"> </span><span class="err">检查</span><span class="n">INTERNET权限</span>
+<span class="mf">2.</span><span class="w"> </span><span class="err">验证</span><span class="n">UID是否在允许范围</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">SELinux</span><span class="w"> </span><span class="n">socket创建检查</span>
+<span class="mf">4.</span><span class="w"> </span><span class="err">返回</span><span class="n">EACCES如果无权限</span>
+</code></pre></div>
+
+<ol start="2">
+<li>
+<p><strong>VPN隔离机制</strong>：
+   - 每个用户独立VPN配置
+   - 通过路由表隔离（ip rule）
+   - 标记（mark）区分VPN流量
+   - per-app VPN支持</p>
+</li>
+<li>
+<p><strong>计量网络控制</strong>：
+   - 后台数据限制
+   - 数据节省模式
+   - 应用待机限制
+   - 低电量限制</p>
+</li>
+</ol>
+<p><strong>网络命名空间使用</strong>（特殊场景）：
+虽然Android主要使用UID隔离，但在某些场景使用network namespace：</p>
 <ul>
-<li>Android：应用隔离、安全为主</li>
-<li>Linux容器：服务部署、资源利用</li>
+<li>网络测试和诊断</li>
+<li>VPN客户端隔离</li>
+<li>容器化应用（如Termux）</li>
+<li>企业VPN隔离</li>
 </ul>
+<p>创建网络namespace：</p>
+<div class="codehilite"><pre><span></span><code>通过setns()和unshare()系统调用
+需要CAP_SYS_ADMIN能力
+主要由特权进程使用
+</code></pre></div>
+
+<p><strong>防火墙规则持久化</strong>：</p>
+<ul>
+<li>规则存储：<code>/data/misc/net/</code></li>
+<li>启动时恢复：netd服务</li>
+<li>动态更新：通过netd socket</li>
+<li>原子性更新：使用iptables-restore</li>
+</ul>
+<h3 id="2615-linux">26.1.5 与Linux容器技术的差异</h3>
+<p>Android容器化与传统Linux容器（如Docker）存在显著差异，这些差异反映了移动平台的特殊需求和约束。</p>
+<p><strong>设计目标差异</strong>：</p>
+<p>| 特性 | Android | Linux容器 |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>Android</th>
+<th>Linux容器</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主要目标</td>
+<td>应用隔离、安全为主</td>
+<td>服务部署、资源利用</td>
+</tr>
+<tr>
+<td>资源模型</td>
+<td>受限硬件、电池供电</td>
+<td>服务器级资源</td>
+</tr>
+<tr>
+<td>生命周期</td>
+<td>频繁启停、后台限制</td>
+<td>长期运行服务</td>
+</tr>
+<tr>
+<td>用户交互</td>
+<td>GUI应用为主</td>
+<td>无头服务为主</td>
+</tr>
+<tr>
+<td>更新模式</td>
+<td>应用商店分发</td>
+<td>镜像版本管理</td>
+</tr>
+</tbody>
+</table>
 <p><strong>实现差异</strong>：</p>
 <ul>
 <li>无完整的容器运行时</li>
+<li>Android无Docker/containerd等</li>
+<li>直接使用kernel原语</li>
+<li>Zygote作为"容器管理器"</li>
 <li>不支持容器镜像概念</li>
+<li>APK作为分发单元</li>
+<li>无分层文件系统</li>
+<li>应用数据持久化在/data</li>
 <li>深度集成ActivityManager</li>
+<li>生命周期由AMS管理</li>
+<li>组件（Activity/Service）粒度控制</li>
+<li>与用户交互紧密结合</li>
 <li>针对移动设备优化</li>
+<li>内存压力下的进程管理</li>
+<li>电池优化的调度策略</li>
+<li>传感器和硬件访问</li>
 </ul>
+<p><strong>技术栈对比</strong>：</p>
+<div class="codehilite"><pre><span></span><code>Linux容器技术栈：          Android技术栈：
+┌─────────────┐          ┌─────────────┐
+│   应用镜像   │          │     APK      │
+├─────────────┤          ├─────────────┤
+│  Container  │          │ActivityThread│
+│   Runtime   │          ├─────────────┤
+├─────────────┤          │    Zygote    │
+│    runc     │          ├─────────────┤
+├─────────────┤          │   Binder     │
+│ Namespaces  │          ├─────────────┤
+│  Cgroups    │          │ UID隔离+NS   │
+└─────────────┘          └─────────────┘
+</code></pre></div>
+
 <p><strong>性能考量</strong>：</p>
 <ul>
-<li>启动速度优先（Zygote预加载）</li>
-<li>内存效率（共享系统库）</li>
-<li>电池寿命（aggressive杀进程）</li>
+<li>启动速度优先</li>
+<li>Zygote预加载减少冷启动</li>
+<li>共享内存映射（系统库）</li>
+<li>Copy-on-Write fork优化</li>
+<li>类预加载和验证</li>
+<li>内存效率</li>
+<li>共享系统库和资源</li>
+<li>Zygote堆共享</li>
+<li>进程优先级和LMK</li>
+<li>内存压缩（ZRAM）</li>
+<li>电池寿命</li>
+<li>Doze模式进程冻结</li>
+<li>应用待机限制</li>
+<li>后台服务限制</li>
+<li>JobScheduler批处理</li>
+</ul>
+<p><strong>资源管理差异</strong>：</p>
+<p>Android资源管理：</p>
+<ul>
+<li>OOM调整值（oom_adj）</li>
+<li>前台：0</li>
+<li>可见：100</li>
+<li>服务：200-500</li>
+<li>缓存：900+</li>
+<li>内存压力响应</li>
+<li>onTrimMemory()回调</li>
+<li>进程优先级调整</li>
+<li>主动清理缓存</li>
+</ul>
+<p>Linux容器资源管理：</p>
+<ul>
+<li>硬限制（Hard Limits）</li>
+<li>软限制（Soft Limits）</li>
+<li>CPU份额和配额</li>
+<li>内存限制和swap</li>
+</ul>
+<p><strong>隔离粒度差异</strong>：</p>
+<p>Android：</p>
+<ul>
+<li>应用级隔离（每个APK）</li>
+<li>组件级管理（四大组件）</li>
+<li>权限级访问控制</li>
+<li>数据共享需显式授权</li>
+</ul>
+<p>Linux容器：</p>
+<ul>
+<li>容器级隔离</li>
+<li>进程组管理</li>
+<li>网络namespace隔离</li>
+<li>卷挂载数据共享</li>
+</ul>
+<p><strong>安全模型差异</strong>：</p>
+<p>Android安全：</p>
+<ul>
+<li>应用签名验证</li>
+<li>权限声明和授予</li>
+<li>SELinux强制访问控制</li>
+<li>应用沙箱默认开启</li>
+</ul>
+<p>容器安全：</p>
+<ul>
+<li>镜像签名（可选）</li>
+<li>Capabilities细粒度控制</li>
+<li>Seccomp配置文件</li>
+<li>AppArmor/SELinux（可选）</li>
+</ul>
+<p><strong>未来发展趋势</strong>：</p>
+<p>Android向容器化靠拢：</p>
+<ul>
+<li>Microdroid轻量虚拟机</li>
+<li>APEX模块化</li>
+<li>增强的namespace使用</li>
+<li>更细粒度的资源控制</li>
+</ul>
+<p>保持的差异：</p>
+<ul>
+<li>以应用为中心</li>
+<li>电池和性能优先</li>
+<li>用户隐私保护</li>
+<li>生态系统兼容性</li>
 </ul>
 <h2 id="262">26.2 多用户与工作资料</h2>
 <h3 id="2621-multi-user">26.2.1 Multi-User架构设计</h3>

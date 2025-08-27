@@ -321,6 +321,67 @@
 <li><code>DisplayDevice</code>：抽象显示设备（主屏、外接显示器等）</li>
 <li><code>RenderEngine</code>：执行GPU合成操作</li>
 </ul>
+<h4 id="layer">Layer管理机制</h4>
+<p>SurfaceFlinger通过分层的方式管理所有可见内容。每个Layer具有以下属性：</p>
+<ol>
+<li>
+<p><strong>几何属性</strong>：
+   - 位置（x, y坐标）
+   - 大小（宽度、高度）
+   - 变换矩阵（旋转、缩放、倾斜）
+   - 裁剪区域</p>
+</li>
+<li>
+<p><strong>渲染属性</strong>：
+   - Alpha透明度
+   - 混合模式（SRC_OVER、SRC等）
+   - 颜色空间（sRGB、Display P3等）
+   - HDR元数据</p>
+</li>
+<li>
+<p><strong>缓冲区属性</strong>：
+   - 当前显示的GraphicBuffer
+   - 像素格式（RGBA_8888、RGB_565等）
+   - 缓冲区使用标志</p>
+</li>
+</ol>
+<h4 id="_2">事务处理机制</h4>
+<p>SurfaceFlinger使用事务（Transaction）机制来原子性地更新多个Layer的状态：</p>
+<ol>
+<li><strong>事务收集</strong>：客户端通过<code>SurfaceComposerClient</code>创建事务</li>
+<li><strong>批量提交</strong>：多个Layer修改打包成一个事务</li>
+<li><strong>延迟应用</strong>：事务在下一个VSYNC边界应用</li>
+<li><strong>原子性保证</strong>：要么全部成功，要么全部回滚</li>
+</ol>
+<p>关键函数调用流程：</p>
+<ul>
+<li><code>SurfaceComposerClient::Transaction::apply()</code>：客户端提交事务</li>
+<li><code>SurfaceFlinger::setTransactionState()</code>：接收并缓存事务</li>
+<li><code>SurfaceFlinger::handleTransactionLocked()</code>：在合成时应用事务</li>
+</ul>
+<h4 id="_3">显示设备抽象</h4>
+<p>DisplayDevice类封装了物理和虚拟显示设备的差异：</p>
+<ol>
+<li>
+<p><strong>物理显示</strong>：
+   - 内置屏幕（主显示器）
+   - HDMI外接显示器
+   - DisplayPort连接</p>
+</li>
+<li>
+<p><strong>虚拟显示</strong>：
+   - 屏幕录制（MediaProjection）
+   - 无线投屏（Miracast）
+   - 开发者选项的辅助显示</p>
+</li>
+</ol>
+<p>每个DisplayDevice维护：</p>
+<ul>
+<li>显示配置（分辨率、刷新率、HDR能力）</li>
+<li>输出缓冲区（FrameBuffer）</li>
+<li>显示变换（方向、镜像）</li>
+<li>电源状态管理</li>
+</ul>
 <h3 id="1012-bufferqueue">10.1.2 BufferQueue机制</h3>
 <p>BufferQueue是Android图形系统中的核心组件，实现了生产者-消费者模式的高效缓冲区管理。其工作流程如下：</p>
 <ol>
@@ -336,6 +397,79 @@
 <li><strong>同步模式</strong>：严格的生产者-消费者同步</li>
 <li><strong>异步模式</strong>：允许丢帧以保持实时性</li>
 </ul>
+<h4 id="_4">缓冲区状态机</h4>
+<p>BufferQueue中的每个缓冲区都有明确的状态转换：</p>
+<div class="codehilite"><pre><span></span><code>FREE → DEQUEUED → QUEUED → ACQUIRED → FREE
+</code></pre></div>
+
+<p>状态说明：</p>
+<ul>
+<li><strong>FREE</strong>：缓冲区空闲，可被生产者申请</li>
+<li><strong>DEQUEUED</strong>：已分配给生产者，正在填充内容</li>
+<li><strong>QUEUED</strong>：内容就绪，等待消费者获取</li>
+<li><strong>ACQUIRED</strong>：消费者正在使用（显示中）</li>
+</ul>
+<p>异常状态处理：</p>
+<ul>
+<li><strong>STALE</strong>：缓冲区内容过期，需要丢弃</li>
+<li><strong>INVALID</strong>：缓冲区配置变更，需要重新分配</li>
+</ul>
+<h4 id="igraphicbufferproducer">生产者接口（IGraphicBufferProducer）</h4>
+<p>生产者通过以下关键接口与BufferQueue交互：</p>
+<ol>
+<li><strong>requestBuffer()</strong>：获取缓冲区的GraphicBuffer句柄</li>
+<li><strong>dequeueBuffer()</strong>：申请可用缓冲区槽位</li>
+<li><strong>queueBuffer()</strong>：提交渲染完成的缓冲区</li>
+<li><strong>cancelBuffer()</strong>：取消已申请但未使用的缓冲区</li>
+<li><strong>connect()</strong>：建立生产者连接</li>
+<li><strong>disconnect()</strong>：断开生产者连接</li>
+</ol>
+<p>高级功能：</p>
+<ul>
+<li><strong>setAsyncMode()</strong>：配置异步模式</li>
+<li><strong>setMaxDequeuedBufferCount()</strong>：设置最大出队缓冲区数</li>
+<li><strong>setGenerationNumber()</strong>：处理Surface重建</li>
+</ul>
+<h4 id="igraphicbufferconsumer">消费者接口（IGraphicBufferConsumer）</h4>
+<p>消费者接口提供以下功能：</p>
+<ol>
+<li><strong>acquireBuffer()</strong>：获取下一个可显示的缓冲区</li>
+<li><strong>releaseBuffer()</strong>：释放已使用的缓冲区</li>
+<li><strong>setConsumerName()</strong>：设置消费者标识（调试用）</li>
+<li><strong>setDefaultBufferFormat()</strong>：配置默认像素格式</li>
+<li><strong>setConsumerUsageBits()</strong>：设置消费者使用标志</li>
+</ol>
+<p>消费者监听器（ConsumerListener）：</p>
+<ul>
+<li><strong>onFrameAvailable()</strong>：新帧可用通知</li>
+<li><strong>onBuffersReleased()</strong>：缓冲区释放通知</li>
+<li><strong>onSidebandStreamChanged()</strong>：边带流变更</li>
+</ul>
+<h4 id="fence">同步机制与Fence</h4>
+<p>BufferQueue使用Fence（栅栏）机制确保GPU/CPU同步：</p>
+<ol>
+<li>
+<p><strong>Acquire Fence</strong>：
+   - 生产者提供，表示何时可以安全读取缓冲区
+   - 消费者等待此fence后才能使用缓冲区</p>
+</li>
+<li>
+<p><strong>Release Fence</strong>：
+   - 消费者提供，表示何时完成缓冲区使用
+   - 生产者等待此fence后才能重新写入</p>
+</li>
+<li>
+<p><strong>Present Fence</strong>：
+   - 表示缓冲区实际显示在屏幕上的时间
+   - 用于精确的显示时间控制</p>
+</li>
+</ol>
+<p>同步保证：</p>
+<ul>
+<li>无撕裂：确保完整帧显示</li>
+<li>无竞争：避免读写冲突</li>
+<li>低延迟：最小化等待时间</li>
+</ul>
 <h3 id="1013-vsync">10.1.3 VSYNC与显示同步</h3>
 <p>VSYNC（垂直同步）是确保流畅显示的关键机制。Android通过Choreographer框架协调应用渲染与显示刷新：</p>
 <ol>
@@ -347,6 +481,90 @@
 <div class="codehilite"><pre><span></span><code>App VSYNC → 应用渲染（16.6ms） → SF VSYNC → 合成（4ms） → 显示
 </code></pre></div>
 
+<h4 id="dispsync">DispSync模型详解</h4>
+<p>DispSync是Android的软件VSYNC预测模型，通过以下机制工作：</p>
+<ol>
+<li>
+<p><strong>相位锁定环（PLL）</strong>：
+   - 跟踪硬件VSYNC时序
+   - 过滤抖动和噪声
+   - 预测未来VSYNC时间</p>
+</li>
+<li>
+<p><strong>误差校正</strong>：
+   - 持续测量预测误差
+   - 动态调整模型参数
+   - 处理刷新率变化</p>
+</li>
+<li>
+<p><strong>多相位支持</strong>：
+   - App相位：应用开始渲染时间
+   - SF相位：SurfaceFlinger开始合成时间
+   - Present相位：实际显示时间</p>
+</li>
+</ol>
+<p>相位计算公式：</p>
+<div class="codehilite"><pre><span></span><code>AppPhase = VSYNCPeriod - AppDuration - SFDuration - PresentDuration
+SFPhase = VSYNCPeriod - SFDuration - PresentDuration
+</code></pre></div>
+
+<h4 id="choreographer">Choreographer架构</h4>
+<p>Choreographer是应用层的VSYNC调度器，负责协调：</p>
+<ol>
+<li><strong>输入事件处理</strong></li>
+<li><strong>动画更新</strong></li>
+<li><strong>View树遍历</strong></li>
+<li><strong>绘制操作</strong></li>
+</ol>
+<p>工作流程：</p>
+<ol>
+<li>注册VSYNC回调：<code>Choreographer.postFrameCallback()</code></li>
+<li>等待VSYNC信号：通过<code>DisplayEventReceiver</code>接收</li>
+<li>执行回调链：按优先级处理各类任务</li>
+<li>提交渲染：将结果发送到RenderThread</li>
+</ol>
+<h4 id="vsync-sfvsync-app">VSYNC-sf与VSYNC-app</h4>
+<p>Android使用双VSYNC机制优化渲染管线：</p>
+<p><strong>VSYNC-app（应用VSYNC）</strong>：</p>
+<ul>
+<li>触发时机：显示前1.5-2帧</li>
+<li>用途：应用开始渲染下一帧</li>
+<li>优化目标：最大化渲染时间</li>
+</ul>
+<p><strong>VSYNC-sf（SurfaceFlinger VSYNC）</strong>：</p>
+<ul>
+<li>触发时机：显示前0.5帧</li>
+<li>用途：SurfaceFlinger开始合成</li>
+<li>优化目标：减少合成延迟</li>
+</ul>
+<p>时序优化策略：</p>
+<ul>
+<li>动态调整相位差</li>
+<li>基于历史数据预测渲染时长</li>
+<li>处理突发负载</li>
+</ul>
+<h4 id="vsync">自适应VSYNC偏移</h4>
+<p>Android 11+引入了自适应VSYNC偏移机制：</p>
+<ol>
+<li>
+<p><strong>工作负载分析</strong>：
+   - 监控渲染时长统计
+   - 识别应用类型（游戏、视频、UI）
+   - 评估系统负载</p>
+</li>
+<li>
+<p><strong>动态调整</strong>：
+   - 高负载时增加偏移
+   - 低延迟场景减少偏移
+   - 平衡功耗和性能</p>
+</li>
+<li>
+<p><strong>反馈控制</strong>：
+   - 检测掉帧情况
+   - 调整预测模型
+   - 优化未来帧调度</p>
+</li>
+</ol>
 <h3 id="1014-hardware-composer-hwc">10.1.4 Hardware Composer (HWC) 集成</h3>
 <p>HWC是SurfaceFlinger与显示硬件之间的抽象层，负责：</p>
 <ol>
@@ -360,6 +578,110 @@
 <li>HWC 2.x：引入更灵活的合成策略</li>
 <li>HWC 3.0：支持可变刷新率（VRR）和HDR</li>
 </ul>
+<h4 id="hwc-2x">HWC 2.x架构详解</h4>
+<p>HWC 2.x引入了更现代的架构设计：</p>
+<ol>
+<li>
+<p><strong>设备与显示分离</strong>：
+   - HWC设备：代表整个合成硬件
+   - Display对象：每个物理/虚拟显示器
+   - Layer对象：可合成的图层</p>
+</li>
+<li>
+<p><strong>能力查询机制</strong>：
+   - <code>getCapabilities()</code>：查询硬件能力
+   - <code>getDisplayCapabilities()</code>：显示器特定能力
+   - <code>getLayerCapabilities()</code>：层类型支持</p>
+</li>
+<li>
+<p><strong>合成类型</strong>：
+   - <strong>Device合成</strong>：硬件直接处理
+   - <strong>Client合成</strong>：GPU渲染到中间缓冲区
+   - <strong>SolidColor合成</strong>：纯色层优化
+   - <strong>Cursor合成</strong>：硬件光标层
+   - <strong>Sideband合成</strong>：视频直通路径</p>
+</li>
+</ol>
+<h4 id="_5">合成策略决策</h4>
+<p>HWC通过以下流程决定每层的合成方式：</p>
+<ol>
+<li>
+<p><strong>validateDisplay()</strong>阶段：
+   - SurfaceFlinger提交所有层信息
+   - HWC分析每层属性
+   - 返回建议的合成类型</p>
+</li>
+<li>
+<p><strong>层属性考虑因素</strong>：
+   - 像素格式兼容性
+   - 变换复杂度（旋转、缩放）
+   - Alpha混合需求
+   - 保护内容（DRM）</p>
+</li>
+<li>
+<p><strong>资源限制</strong>：
+   - 硬件层数限制
+   - 带宽限制
+   - 功耗预算</p>
+</li>
+<li>
+<p><strong>acceptDisplayChanges()</strong>：
+   - 接受HWC的合成建议
+   - 准备相应的渲染路径</p>
+</li>
+</ol>
+<h4 id="presentretire">Present与Retire机制</h4>
+<p>HWC使用Present/Retire机制管理显示时序：</p>
+<ol>
+<li>
+<p><strong>presentDisplay()</strong>：
+   - 提交最终的显示配置
+   - 返回present fence
+   - 触发硬件开始扫描</p>
+</li>
+<li>
+<p><strong>getReleaseFences()</strong>：
+   - 获取每层的release fence
+   - 表示硬件何时完成读取
+   - 用于缓冲区生命周期管理</p>
+</li>
+<li>
+<p><strong>Retire fence</strong>：
+   - 表示前一帧完全离开屏幕
+   - 用于精确的延迟测量
+   - 支持帧调度优化</p>
+</li>
+</ol>
+<h4 id="hdr">HDR与色彩管理</h4>
+<p>HWC 2.3+增加了高级色彩管理支持：</p>
+<ol>
+<li>
+<p><strong>HDR类型支持</strong>：
+   - HDR10：静态元数据
+   - HDR10+：动态元数据
+   - Dolby Vision：专有格式
+   - HLG：广播兼容HDR</p>
+</li>
+<li>
+<p><strong>色彩空间管理</strong>：
+   - sRGB：标准色彩空间
+   - Display P3：广色域
+   - BT.2020：超高清标准
+   - 自定义色彩矩阵</p>
+</li>
+<li>
+<p><strong>色调映射</strong>：
+   - SDR到HDR转换
+   - HDR到SDR转换
+   - 亮度自适应</p>
+</li>
+<li>
+<p><strong>实现要求</strong>：
+   - 10-bit色深支持
+   - 广色域显示能力
+   - 精确的色彩转换</p>
+</li>
+</ol>
 <h3 id="1015">10.1.5 帧调度与延迟优化</h3>
 <p>SurfaceFlinger采用多种技术优化渲染延迟：</p>
 <ol>
@@ -373,6 +695,119 @@
 <li><strong>触摸延迟</strong>：从触摸到显示更新的时间</li>
 <li><strong>卡顿率</strong>：掉帧次数占总帧数的比例</li>
 <li><strong>能耗效率</strong>：每帧渲染的能量消耗</li>
+</ul>
+<h4 id="_6">预测调度算法</h4>
+<p>SurfaceFlinger使用基于机器学习的预测模型：</p>
+<ol>
+<li>
+<p><strong>特征收集</strong>：
+   - 应用类型（游戏、视频、UI）
+   - 层数量和复杂度
+   - GPU/CPU负载状态
+   - 历史渲染时长</p>
+</li>
+<li>
+<p><strong>预测模型</strong>：
+   - 滑动窗口统计
+   - 指数加权移动平均
+   - 异常值过滤</p>
+</li>
+<li>
+<p><strong>自适应调整</strong>：
+   - 实时更新预测参数
+   - 处理场景切换
+   - 防止过度优化</p>
+</li>
+</ol>
+<p>预测公式：</p>
+<div class="codehilite"><pre><span></span><code>PredictedDuration = α <span class="gs">* HistoricalAvg + β *</span> RecentTrend + γ * LoadFactor
+</code></pre></div>
+
+<h4 id="drr">动态刷新率（DRR）策略</h4>
+<p>Android 11+引入的动态刷新率机制：</p>
+<ol>
+<li>
+<p><strong>内容检测</strong>：
+   - 视频帧率匹配（24/30/60fps）
+   - 游戏性能需求（90/120Hz）
+   - UI滚动流畅度
+   - 电池电量状态</p>
+</li>
+<li>
+<p><strong>切换策略</strong>：
+   - 无缝切换：避免黑屏
+   - 迟滞决策：防止频繁切换
+   - 优先级管理：前台应用优先</p>
+</li>
+<li>
+<p><strong>刷新率档位</strong>：
+   - 60Hz：基础档位
+   - 90Hz：平衡性能与功耗
+   - 120Hz：高性能模式
+   - 30Hz：节能模式（阅读）</p>
+</li>
+</ol>
+<h4 id="blast">BLAST缓冲区传输</h4>
+<p>BLAST是Android 12引入的新一代缓冲区传输机制：</p>
+<ol>
+<li>
+<p><strong>异步传输</strong>：
+   - 解耦BufferQueue依赖
+   - 减少IPC开销
+   - 支持批量传输</p>
+</li>
+<li>
+<p><strong>事务同步</strong>：
+   - 与SurfaceFlinger事务同步
+   - 保证原子性更新
+   - 支持回滚机制</p>
+</li>
+<li>
+<p><strong>性能优化</strong>：
+   - 减少缓冲区拷贝
+   - 降低延迟抖动
+   - 提高帧率稳定性</p>
+</li>
+</ol>
+<p>关键接口：</p>
+<ul>
+<li><code>BLASTBufferQueue::submitBuffer()</code></li>
+<li><code>Transaction::setBuffer()</code></li>
+<li><code>SurfaceControl::updateBuffer()</code></li>
+</ul>
+<h4 id="_7">触摸延迟优化</h4>
+<p>降低触摸延迟的关键技术：</p>
+<ol>
+<li>
+<p><strong>触摸采样优化</strong>：
+   - 提高采样率（240Hz+）
+   - 硬件时间戳
+   - 预测正触摸轨迹</p>
+</li>
+<li>
+<p><strong>输入管线优化</strong>：
+   - 直通输入事件
+   - 跳过不必要的层级
+   - 实时线程优先级</p>
+</li>
+<li>
+<p><strong>渲染管线同步</strong>：
+   - 触摸事件与VSYNC对齐
+   - 预测性渲染
+   - GPU优先级提升</p>
+</li>
+<li>
+<p><strong>测量与反馈</strong>：
+   - MotionEvent时间戳
+   - 帧显示时间跟踪
+   - 端到端延迟统计</p>
+</li>
+</ol>
+<p>典型优化结果：</p>
+<ul>
+<li>基线：80-100ms</li>
+<li>优化后：40-60ms</li>
+<li>极限优化：20-30ms</li>
 </ul>
 <h2 id="102-graphics-halgralloc">10.2 Graphics HAL与Gralloc</h2>
 <p>Graphics HAL是Android硬件抽象层的重要组成部分，为上层图形栈提供统一的硬件访问接口。</p>
@@ -402,6 +837,57 @@
 <li>支持可扩展的元数据</li>
 <li>与IAllocator AIDL接口集成</li>
 </ul>
+<h4 id="gralloc-40">Gralloc 4.0架构详解</h4>
+<p>Gralloc 4.0引入了更现代化的设计：</p>
+<ol>
+<li>
+<p><strong>模块化设计</strong>：
+   - IAllocator：缓冲区分配服务
+   - IMapper：缓冲区映射服务
+   - BufferDescriptorInfo：统一描述符</p>
+</li>
+<li>
+<p><strong>元数据系统</strong>：
+   - StandardMetadataType：标准元数据
+   - VendorMetadataType：厂商扩展
+   - 动态元数据查询</p>
+</li>
+<li>
+<p><strong>错误处理</strong>：
+   - 详细的错误码
+   - 异常恢复机制
+   - 调试信息输出</p>
+</li>
+</ol>
+<h4 id="usage-flags">Usage Flags详解</h4>
+<p>Usage标志决定了缓冲区的分配策略：</p>
+<p><strong>CPU访问标志</strong>：</p>
+<ul>
+<li><code>USAGE_CPU_READ_RARELY</code>：偶尔CPU读取</li>
+<li><code>USAGE_CPU_READ_OFTEN</code>：频繁CPU读取</li>
+<li><code>USAGE_CPU_WRITE_RARELY</code>：偶尔CPU写入</li>
+<li><code>USAGE_CPU_WRITE_OFTEN</code>：频繁CPU写入</li>
+</ul>
+<p><strong>GPU访问标志</strong>：</p>
+<ul>
+<li><code>USAGE_GPU_TEXTURE</code>：作为GPU纹理</li>
+<li><code>USAGE_GPU_RENDER_TARGET</code>：作为渲染目标</li>
+<li><code>USAGE_GPU_CUBE_MAP</code>：立方体贴图</li>
+<li><code>USAGE_GPU_DATA_BUFFER</code>：通用GPU数据</li>
+</ul>
+<p><strong>特殊用途标志</strong>：</p>
+<ul>
+<li><code>USAGE_HW_COMPOSER</code>：HWC合成</li>
+<li><code>USAGE_HW_VIDEO_ENCODER</code>：视频编码</li>
+<li><code>USAGE_CAMERA_OUTPUT</code>：相机输出</li>
+<li><code>USAGE_PROTECTED</code>：DRM保护内容</li>
+</ul>
+<p>组合策略：</p>
+<ul>
+<li>多个usage可以组合</li>
+<li>驱动根据组合选择最优内存</li>
+<li>冲突的usage会导致分配失败</li>
+</ul>
 <h3 id="1022">10.2.2 缓冲区分配策略</h3>
 <p>Gralloc根据usage标志选择合适的内存类型：</p>
 <ol>
@@ -417,6 +903,84 @@
 <li>性能需求（带宽、延迟）</li>
 <li>安全要求（DRM、安全视频路径）</li>
 </ul>
+<h4 id="_8">内存类型选择算法</h4>
+<p>Gralloc使用决策树选择最佳内存类型：</p>
+<ol>
+<li><strong>第一步：安全性检查</strong></li>
+</ol>
+<div class="codehilite"><pre><span></span><code>if (usage &amp; USAGE_PROTECTED) {
+    return SECURE_HEAP;
+}
+</code></pre></div>
+
+<ol start="2">
+<li><strong>第二步：访问模式分析</strong></li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">if</span> <span class="p">(</span><span class="n">usage</span> <span class="o">&amp;</span> <span class="n">CPU_WRITE_OFTEN</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">if</span> <span class="p">(</span><span class="n">usage</span> <span class="o">&amp;</span> <span class="n">GPU_RENDER_TARGET</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">return</span> <span class="n">CACHED_COHERENT_HEAP</span><span class="p">;</span>
+    <span class="p">}</span> <span class="n">else</span> <span class="p">{</span>
+        <span class="n">return</span> <span class="n">SYSTEM_HEAP</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>第三步：性能优化</strong></li>
+</ol>
+<div class="codehilite"><pre><span></span><code>if (usage &amp; GPU_TEXTURE &amp;&amp; !(usage &amp; CPU_ACCESS)) {
+    return GPU_PRIVATE_HEAP;
+}
+</code></pre></div>
+
+<h4 id="_9">像素格式与内存布局</h4>
+<p>不同像素格式需要不同的内存布局策略：</p>
+<p><strong>RGB格式</strong>：</p>
+<ul>
+<li>RGBA_8888：32位线性布局</li>
+<li>RGB_565：16位紧凑布局</li>
+<li>RGBA_1010102：HDR 10位颜色深度</li>
+</ul>
+<p><strong>YUV格式</strong>：</p>
+<ul>
+<li>YV12：平面格式，Y/U/V分离</li>
+<li>NV12：半平面格式，Y和UV交织</li>
+<li>NV21：NV12的UV字节序交换</li>
+</ul>
+<p><strong>压缩格式</strong>：</p>
+<ul>
+<li>AFBC：ARM帧缓冲压缩</li>
+<li>UBWC：高通通用带宽压缩</li>
+<li>厂商私有压缩格式</li>
+</ul>
+<p>内存对齐要求：</p>
+<ul>
+<li>CPU访问：通常昧64字节对齐</li>
+<li>GPU纹理：可能需要256字节对齐</li>
+<li>显示扫描：可能需要页对齐</li>
+</ul>
+<h4 id="_10">带宽优化策略</h4>
+<p>减少内存带宽消耗的技术：</p>
+<ol>
+<li>
+<p><strong>帧缓冲压缩</strong>：
+   - 透明压缩/解压
+   - 显著降低带宽需求
+   - GPU/显示硬件支持</p>
+</li>
+<li>
+<p><strong>智能缓存</strong>：
+   - 利用GPU内部缓存
+   - 减少对外部内存访问
+   - Tile-based渲染优化</p>
+</li>
+<li>
+<p><strong>局部更新</strong>：
+   - 只更新变化区域
+   - 减少整帧传输
+   - 节省带宽和功耗</p>
+</li>
+</ol>
 <h3 id="1023-ion">10.2.3 ION内存分配器集成</h3>
 <p>ION是Android特有的内存管理子系统，提供：</p>
 <ol>
@@ -432,6 +996,96 @@
 <li>CMA heap：动态连续内存分配</li>
 <li>Secure heap：安全隔离内存</li>
 </ul>
+<h4 id="ion">ION架构详解</h4>
+<p>ION采用客户端-服务端架构：</p>
+<ol>
+<li>
+<p><strong>客户端接口</strong>：
+   - <code>ion_alloc()</code>：分配内存
+   - <code>ion_map()</code>：映射到用户空间
+   - <code>ion_share()</code>：获取可共享的fd
+   - <code>ion_free()</code>：释放内存</p>
+</li>
+<li>
+<p><strong>内核驱动</strong>：
+   - 管理多个heap
+   - 处理内存分配请求
+   - 维护引用计数
+   - 处理cache操作</p>
+</li>
+<li>
+<p><strong>Heap实现</strong>：
+   - 每个heap有不同策略
+   - 可扩展新heap类型
+   - 支持厂商定制</p>
+</li>
+</ol>
+<h4 id="system-heap">System Heap实现</h4>
+<p>System heap是最常用的heap类型：</p>
+<ol>
+<li>
+<p><strong>分配策略</strong>：
+   - 使用伙伴系统
+   - 支持大小不同的分配
+   - 页面级别管理</p>
+</li>
+<li>
+<p><strong>优化特性</strong>：
+   - 页面池缓存
+   - 延迟分配
+   - 碎片整理</p>
+</li>
+<li>
+<p><strong>性能考虑</strong>：
+   - 快速分配路径
+   - 批量操作优化
+   - NUMA感知</p>
+</li>
+</ol>
+<h4 id="cma-heap">CMA Heap实现</h4>
+<p>CMA（Contiguous Memory Allocator）heap提供大块连续内存：</p>
+<ol>
+<li>
+<p><strong>动态分配</strong>：
+   - 从可移动页面池分配
+   - 需要时迁移页面
+   - 平时可供系统使用</p>
+</li>
+<li>
+<p><strong>使用场景</strong>：
+   - 相机预览缓冲区
+   - 视频解码器DMA
+   - GPU大块纹理</p>
+</li>
+<li>
+<p><strong>性能权衡</strong>：
+   - 分配可能较慢
+   - 但连续性保证
+   - 减少IOMMU压力</p>
+</li>
+</ol>
+<h4 id="secure-heap">Secure Heap实现</h4>
+<p>Secure heap用于DRM保护内容：</p>
+<ol>
+<li>
+<p><strong>隔离机制</strong>：
+   - TrustZone保护
+   - CPU不可访问
+   - 仅硬件解码器可用</p>
+</li>
+<li>
+<p><strong>使用流程</strong>：
+   - 安全世界分配
+   - 返回句柄到普通世界
+   - 通过句柄传递给硬件</p>
+</li>
+<li>
+<p><strong>应用场景</strong>：
+   - DRM视频播放
+   - 安全相机
+   - 生物识别数据</p>
+</li>
+</ol>
 <h3 id="1024">10.2.4 跨进程缓冲区共享</h3>
 <p>Android通过文件描述符实现高效的跨进程图形缓冲区共享：</p>
 <ol>
@@ -446,6 +1100,99 @@
 <li><code>lock()/unlock()</code>：CPU访问同步</li>
 <li><code>importBuffer()</code>：导入外部缓冲区</li>
 </ul>
+<h4 id="_11">跨进程共享流程</h4>
+<p>完整的跨进程缓冲区共享流程：</p>
+<ol>
+<li><strong>生产者端</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">allocate</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">buffer_handle_t</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">封装handle和fd到Parcel</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">通过Binder发送</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">保持引用直到确认接收</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>消费者端</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">从Binder接收Parcel</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">提取handle和fd</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">importBuffer</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">本地handle</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">registerBuffer</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">注册到mapper</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>使用阶段</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">lock</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">获取CPU访问权</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">读写缓冲区内容</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">unlock</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">释放CPU访问权</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">同步fence传递</span>
+</code></pre></div>
+
+<h4 id="native-handle">Native Handle结构</h4>
+<p>native_handle_t的设计支持灵活的数据传输：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">typedef</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">native_handle</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">version</span><span class="p">;</span><span class="w">        </span><span class="c1">// 版本号</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">numFds</span><span class="p">;</span><span class="w">         </span><span class="c1">// 文件描述符数量</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">numInts</span><span class="p">;</span><span class="w">        </span><span class="c1">// 整数数据数量</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span><span class="w">        </span><span class="c1">// 变长数据区</span>
+<span class="p">}</span><span class="w"> </span><span class="n">native_handle_t</span><span class="p">;</span>
+</code></pre></div>
+
+<p>数据布局：</p>
+<ul>
+<li>前numFds个位置存放文件描述符</li>
+<li>后面numInts个位置存放整数数据</li>
+<li>整数数据通常包含：</li>
+<li>宽度、高度</li>
+<li>像素格式</li>
+<li>步长（stride）</li>
+<li>厂商私有数据</li>
+</ul>
+<h4 id="binder">Binder传输优化</h4>
+<p>Binder对文件描述符有特殊处理：</p>
+<ol>
+<li>
+<p><strong>FD转换</strong>：
+   - 内核自动转换fd
+   - 目标进程获得新fd
+   - 指向同一内核对象</p>
+</li>
+<li>
+<p><strong>安全检查</strong>：
+   - 验证fd有效性
+   - 检查访问权限
+   - 防止fd注入攻击</p>
+</li>
+<li>
+<p><strong>生命周期管理</strong>：
+   - Binder保证传输完整性
+   - 异常时自动清理
+   - 防止资源泄漏</p>
+</li>
+</ol>
+<h4 id="ahardwarebuffer">AHardwareBuffer封装</h4>
+<p>Android 8.0引入AHardwareBuffer作为更高级的抽象：</p>
+<ol>
+<li>
+<p><strong>统一API</strong>：
+   - NDK可用
+   - 跨语言支持
+   - 简化使用</p>
+</li>
+<li>
+<p><strong>功能增强</strong>：
+   - 自动引用计数
+   - 格式查询和验证
+   - 更好的错误处理</p>
+</li>
+<li>
+<p><strong>与其他API集成</strong>：
+   - EGL扩展支持
+   - Vulkan外部内存
+   - MediaCodec集成</p>
+</li>
+</ol>
 <h3 id="1025-dma-buf">10.2.5 DMA-BUF与跨设备共享</h3>
 <p>DMA-BUF是Linux内核的缓冲区共享框架，Android利用它实现：</p>
 <ol>
@@ -458,6 +1205,107 @@
 <li>Implicit fencing：基于reservation object</li>
 <li>Explicit fencing：使用sync_file接口</li>
 <li>Timeline semaphore：Vulkan风格的同步原语</li>
+</ul>
+<h4 id="dma-buf">DMA-BUF工作原理</h4>
+<p>DMA-BUF通过文件描述符实现设备间共享：</p>
+<ol>
+<li>
+<p><strong>导出者（Exporter）</strong>：
+   - 创建DMA-BUF对象
+   - 实现attach/detach回调
+   - 管理物理页面</p>
+</li>
+<li>
+<p><strong>导入者（Importer）</strong>：
+   - 通过fd获取DMA-BUF
+   - attach到设备
+   - 映射到设备地址空间</p>
+</li>
+<li>
+<p><strong>核心操作</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">dma_buf_export</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">创建</span><span class="n">DMA</span><span class="o">-</span><span class="n">BUF</span>
+<span class="n">dma_buf_fd</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">获取文件描述符</span>
+<span class="n">dma_buf_get</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">通过</span><span class="n">fd获取DMA</span><span class="o">-</span><span class="n">BUF</span>
+<span class="n">dma_buf_attach</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">附加到设备</span>
+<span class="n">dma_buf_map_attachment</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">映射到设备</span>
+</code></pre></div>
+
+<h4 id="implicit-sync">隐式同步（Implicit Sync）</h4>
+<p>基于reservation object的自动同步：</p>
+<ol>
+<li>
+<p><strong>Reservation Object</strong>：
+   - 每个DMA-BUF关联一个resv
+   - 包含读写fence列表
+   - 自动跟踪依赖关系</p>
+</li>
+<li>
+<p><strong>工作流程</strong>：
+   - 写入前等待所有读写fence
+   - 读取前等待写fence
+   - 完成后添加新fence</p>
+</li>
+<li>
+<p><strong>优缺点</strong>：
+   - 优点：透明、自动
+   - 缺点：灵活性不足
+   - 适用：传统图形管线</p>
+</li>
+</ol>
+<h4 id="explicit-sync">显式同步（Explicit Sync）</h4>
+<p>使用sync_file显式管理同步：</p>
+<ol>
+<li>
+<p><strong>Sync File</strong>：
+   - 封装一个或多个fence
+   - 通过fd传递
+   - 支持合并操作</p>
+</li>
+<li>
+<p><strong>Android集成</strong>：
+   - BufferQueue使用
+   - HWC传递
+   - GPU驱动支持</p>
+</li>
+<li>
+<p><strong>API示例</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">sync_wait</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">等待</span><span class="n">fence信号</span>
+<span class="n">sync_merge</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">合并多个</span><span class="n">fence</span>
+<span class="n">sync_file_info</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="err">查询</span><span class="n">fence状态</span>
+</code></pre></div>
+
+<h4 id="_12">零拷贝相机预览</h4>
+<p>利用DMA-BUF实现相机到显示的零拷贝路径：</p>
+<ol>
+<li>
+<p><strong>相机HAL</strong>：
+   - 分配来自Gralloc的缓冲区
+   - 配置ISP直接输出到DMA-BUF
+   - 设置合适的像素格式</p>
+</li>
+<li>
+<p><strong>GPU处理</strong>：
+   - 直接使用相机输出作为纹理
+   - 无需内存拷贝
+   - 实时特效处理</p>
+</li>
+<li>
+<p><strong>显示输出</strong>：
+   - HWC直接合成
+   - 或GPU渲染后显示
+   - 最小化延迟</p>
+</li>
+</ol>
+<p>性能优势：</p>
+<ul>
+<li>零内存拷贝</li>
+<li>降低功耗</li>
+<li>减少延迟</li>
+<li>提高帧率</li>
 </ul>
 <h2 id="103-vulkanopengl-es">10.3 Vulkan/OpenGL ES集成</h2>
 <p>Android支持多种图形API，其中OpenGL ES作为传统API，Vulkan作为现代低开销API，两者在Android中有不同的集成方式和应用场景。</p>
@@ -723,7 +1571,7 @@
 <li>iOS可以进行更激进的优化</li>
 <li>Android生态更加开放和多样化</li>
 </ul>
-<h2 id="_2">本章小结</h2>
+<h2 id="_13">本章小结</h2>
 <p>Android图形系统是一个复杂而精密的子系统，本章深入剖析了其核心组件和工作原理：</p>
 <ol>
 <li>
@@ -748,8 +1596,8 @@
 <li>着色器缓存机制显著改善了应用启动性能</li>
 </ul>
 <p>理解这些概念对于进行图形性能优化、解决渲染问题以及开发高性能图形应用至关重要。</p>
-<h2 id="_3">练习题</h2>
-<h3 id="_4">基础题</h3>
+<h2 id="_14">练习题</h2>
+<h3 id="_15">基础题</h3>
 <p><strong>练习10.1</strong>：解释BufferQueue中的三重缓冲机制如何减少画面撕裂。</p>
 <p><em>提示：考虑前台缓冲、后台缓冲和第三缓冲区的作用。</em></p>
 <details>
@@ -786,7 +1634,7 @@
 </ol>
 <p>通过将合成工作卸载到专用硬件，可以让GPU进入低功耗状态，显著降低整体功耗。</p>
 </details>
-<h3 id="_5">挑战题</h3>
+<h3 id="_16">挑战题</h3>
 <p><strong>练习10.4</strong>：分析为什么Android选择将SurfaceFlinger作为独立进程，而iOS将合成器集成在WindowServer中。讨论各自的优缺点。</p>
 <p><em>提示：从安全性、性能、模块化等角度思考。</em></p>
 <details>
@@ -941,7 +1789,7 @@
 </ol>
 <p>预期收益：相比静态策略降低15-20%功耗，提升10%流畅度。</p>
 </details>
-<h2 id="_6">常见陷阱与错误</h2>
+<h2 id="_17">常见陷阱与错误</h2>
 <h3 id="1-bufferqueue">1. BufferQueue死锁</h3>
 <p><strong>问题</strong>：生产者等待空闲缓冲区，消费者等待填充缓冲区，形成死锁。
 <strong>解决</strong>：设置合理的超时机制，使用异步模式避免阻塞。</p>
@@ -966,15 +1814,15 @@
 <h3 id="8">8. 刷新率切换闪烁</h3>
 <p><strong>问题</strong>：动态刷新率切换时出现黑屏或闪烁。
 <strong>解决</strong>：实现无缝切换逻辑，确保切换发生在帧边界。</p>
-<h2 id="_7">最佳实践检查清单</h2>
-<h3 id="_8">架构设计</h3>
+<h2 id="_18">最佳实践检查清单</h2>
+<h3 id="_19">架构设计</h3>
 <ul>
 <li>[ ] 明确区分渲染线程和UI线程职责</li>
 <li>[ ] 实现高效的跨进程图形缓冲区共享</li>
 <li>[ ] 设计合理的缓冲区生命周期管理</li>
 <li>[ ] 考虑多显示设备支持</li>
 </ul>
-<h3 id="_9">性能优化</h3>
+<h3 id="_20">性能优化</h3>
 <ul>
 <li>[ ] 使用systrace分析渲染管线瓶颈</li>
 <li>[ ] 实现三重缓冲减少延迟</li>
@@ -982,28 +1830,28 @@
 <li>[ ] 利用HWC硬件加速能力</li>
 <li>[ ] 实现着色器预编译和缓存</li>
 </ul>
-<h3 id="_10">内存管理</h3>
+<h3 id="_21">内存管理</h3>
 <ul>
 <li>[ ] 选择合适的像素格式减少带宽</li>
 <li>[ ] 实现缓冲区池避免频繁分配</li>
 <li>[ ] 正确处理GraphicBuffer引用计数</li>
 <li>[ ] 监控GPU内存使用防止泄漏</li>
 </ul>
-<h3 id="_11">同步机制</h3>
+<h3 id="_22">同步机制</h3>
 <ul>
 <li>[ ] 正确使用fence同步GPU/CPU访问</li>
 <li>[ ] 实现基于VSYNC的渲染调度</li>
 <li>[ ] 处理跨进程同步边界条件</li>
 <li>[ ] 避免过度同步导致的性能损失</li>
 </ul>
-<h3 id="_12">兼容性保证</h3>
+<h3 id="_23">兼容性保证</h3>
 <ul>
 <li>[ ] 支持多种GPU架构特性差异</li>
 <li>[ ] 处理不同Android版本API差异</li>
 <li>[ ] 提供优雅的功能降级方案</li>
 <li>[ ] 测试不同刷新率显示设备</li>
 </ul>
-<h3 id="_13">调试与监控</h3>
+<h3 id="_24">调试与监控</h3>
 <ul>
 <li>[ ] 集成性能监控指标（FPS、延迟等）</li>
 <li>[ ] 实现可视化调试工具</li>

@@ -350,6 +350,76 @@
 <li><strong>生命周期管理</strong>：由系统管理Provider进程的启动和销毁</li>
 <li><strong>数据类型抽象</strong>：支持结构化数据、文件、流等多种数据类型</li>
 </ul>
+<h3 id="913">9.1.3 与其他数据共享机制的对比</h3>
+<p>Android提供了多种数据共享机制，ContentProvider在其中的定位：</p>
+<div class="codehilite"><pre><span></span><code>数据共享机制对比：
+┌────────────────┬─────────────────┬─────────────────┬──────────────────┐
+│     机制       │  适用场景        │   性能特征       │    安全性        │
+├────────────────┼─────────────────┼─────────────────┼──────────────────┤
+│ ContentProvider│ 结构化数据      │ 中等(IPC开销)   │ 高(URI权限)      │
+│ Shared Prefs   │ 简单配置        │ 高(文件访问)    │ 低(MODE_WORLD_*) │
+│ File Provider  │ 文件共享        │ 高(直接访问)    │ 中(临时权限)     │
+│ Broadcast      │ 事件通知        │ 低(广播开销)    │ 中(权限广播)     │
+│ Service/AIDL   │ 复杂交互        │ 高(直接调用)    │ 高(自定义)       │
+│ Shared UID     │ 同签名应用      │ 最高(同进程)    │ 取决于应用       │
+└────────────────┴─────────────────┴─────────────────┴──────────────────┘
+</code></pre></div>
+
+<p>选择指南：</p>
+<ul>
+<li><strong>ContentProvider</strong>：当需要共享结构化数据，支持查询和实时通知时</li>
+<li><strong>FileProvider</strong>：共享单个文件或文件集合，不需要结构化查询</li>
+<li><strong>Service/AIDL</strong>：需要复杂的方法调用和回调，而非数据CRUD</li>
+<li><strong>Broadcast</strong>：一对多的事件通知，不适合大数据传输</li>
+</ul>
+<h3 id="914-contentprovider">9.1.4 系统ContentProvider实例分析</h3>
+<p>Android系统内置了多个重要的ContentProvider，它们的实现展示了最佳实践：</p>
+<ol>
+<li>
+<p><strong>MediaProvider</strong> (<code>MediaStore</code>)
+   - 管理图片、视频、音频等媒体文件
+   - 提供缩略图生成和元数据管理
+   - Android 10后支持Scoped Storage
+   - 使用触发器维护数据一致性</p>
+</li>
+<li>
+<p><strong>ContactsProvider</strong> (<code>ContactsContract</code>)
+   - 管理联系人和通话记录
+   - 支持多账户聚合
+   - 复杂的数据模型（raw contacts、data、groups）
+   - 实现了高效的全文搜索</p>
+</li>
+<li>
+<p><strong>CalendarProvider</strong> (<code>CalendarContract</code>)
+   - 管理日历事件和提醒
+   - 支持同步适配器框架
+   - 处理时区和重复事件的复杂逻辑
+   - 实现了细粒度的权限控制</p>
+</li>
+<li>
+<p><strong>SettingsProvider</strong> (<code>Settings.System/Secure/Global</code>)
+   - 系统设置的集中存储
+   - 分层权限控制（用户/系统/全局）
+   - 支持配置变更监听
+   - 内存缓存优化读取性能</p>
+</li>
+<li>
+<p><strong>TelephonyProvider</strong>
+   - 短信（SMS）和彩信（MMS）数据管理
+   - APN（接入点）配置
+   - SIM卡信息管理
+   - 严格的权限控制</p>
+</li>
+</ol>
+<p>这些系统Provider的共同特点：</p>
+<ul>
+<li>使用SQLite作为底层存储</li>
+<li>实现了复杂的数据模型和关系</li>
+<li>提供了丰富的URI scheme</li>
+<li>优化了常见查询场景</li>
+<li>支持数据变更通知</li>
+<li>实现了版本迁移机制</li>
+</ul>
 <h2 id="92-contentprovider">9.2 ContentProvider实现原理</h2>
 <h3 id="921">9.2.1 进程间通信机制</h3>
 <p>ContentProvider的跨进程通信建立在Binder机制之上，但在其上层提供了更高级的抽象。</p>
@@ -469,6 +539,57 @@
    - 处理数据窗口的获取和缓存
    - 实现本地Cursor接口</p>
 </li>
+<li>
+<p><strong>跨进程Cursor架构</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">Cursor跨进程传输架构</span><span class="err">：</span>
+<span class="err">┌──────────────────┐</span><span class="w">         </span><span class="err">┌──────────────────┐</span>
+<span class="err">│</span><span class="w">  </span><span class="n">Provider进程</span><span class="w">     </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w">   </span><span class="err">客户端进程</span><span class="w">      </span><span class="err">│</span>
+<span class="err">│</span><span class="w">                  </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w">                  </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="n">SQLiteCursor</span><span class="w">     </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w"> </span><span class="n">BulkCursorTo</span><span class="w">    </span><span class="err">│</span>
+<span class="err">│</span><span class="w">      </span><span class="err">↓</span><span class="w">          </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w"> </span><span class="n">CursorAdaptor</span><span class="w">   </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="n">CursorWrapper</span><span class="w">    </span><span class="err">│</span><span class="w"> </span><span class="n">Binder</span><span class="w">  </span><span class="err">│</span><span class="w">      </span><span class="err">↑</span><span class="w">          </span><span class="err">│</span>
+<span class="err">│</span><span class="w">      </span><span class="err">↓</span><span class="w">          </span><span class="err">│</span><span class="o">&lt;-------&gt;</span><span class="err">│</span><span class="w"> </span><span class="n">IBulkCursor</span><span class="w">     </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="n">CursorToBulk</span><span class="w">    </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w">                  </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="n">CursorAdaptor</span><span class="w">   </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w">                  </span><span class="err">│</span>
+<span class="err">│</span><span class="w">      </span><span class="err">↓</span><span class="w">          </span><span class="err">│</span><span class="w">         </span><span class="err">│</span><span class="w">      </span><span class="err">↓</span><span class="w">          </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="err">┌──────────────┐│</span><span class="w">         </span><span class="err">│┌──────────────┐</span><span class="w"> </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="err">│</span><span class="n">CursorWindow</span><span class="w">  </span><span class="err">││</span><span class="w"> </span><span class="n">ashmem</span><span class="w">  </span><span class="err">││</span><span class="n">CursorWindow</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="err">│</span><span class="p">(</span><span class="err">共享内存</span><span class="p">)</span><span class="w">     </span><span class="err">││</span><span class="o">&lt;-------&gt;</span><span class="err">││</span><span class="p">(</span><span class="err">共享内存</span><span class="p">)</span><span class="w">     </span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="err">│</span><span class="w"> </span><span class="err">└──────────────┘│</span><span class="w">         </span><span class="err">│└──────────────┘</span><span class="w"> </span><span class="err">│</span>
+<span class="err">└──────────────────┘</span><span class="w">         </span><span class="err">└──────────────────┘</span>
+</code></pre></div>
+
+<ol start="4">
+<li><strong>CursorWindow内存布局</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code>CursorWindow内存结构：
+┌─────────────────────────────────────┐
+│          Header (元数据)             │
+├─────────────────────────────────────┤
+│ numRows │ numColumns │ freeSpace    │
+├─────────────────────────────────────┤
+│          Row Offsets Array          │
+├─────────────────────────────────────┤
+│          Field Slots Matrix         │
+│ ┌─────┬─────┬─────┬─────┐        │
+│ │slot0│slot1│slot2│slot3│ Row 0  │
+│ ├─────┼─────┼─────┼─────┤        │
+│ │slot0│slot1│slot2│slot3│ Row 1  │
+│ └─────┴─────┴─────┴─────┘        │
+├─────────────────────────────────────┤
+│          Variable Data Area         │
+│  (strings, blobs等变长数据)         │
+└─────────────────────────────────────┘
+</code></pre></div>
+
+<ol start="5">
+<li><strong>性能优化策略</strong>：
+   - <strong>预填充</strong>：Provider端预先填充多行数据
+   - <strong>懒加载</strong>：客户端按需请求新的Window
+   - <strong>缓存机制</strong>：缓存最近访问的Window
+   - <strong>批量传输</strong>：减少IPC调用次数</li>
 </ol>
 <h3 id="924">9.2.4 批量操作与事务支持</h3>
 <p>ContentProvider支持高效的批量操作：</p>
@@ -606,6 +727,82 @@ Provider级别权限
 <li><strong>检查全局权限</strong>：作为默认权限</li>
 <li><strong>检查exported属性</strong>：是否允许外部访问</li>
 </ol>
+<h3 id="935">9.3.5 权限继承与传递</h3>
+<p>ContentProvider的权限可以通过多种方式传递：</p>
+<ol>
+<li><strong>Intent权限传递</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 发送方授予权限</span>
+<span class="n">Intent</span><span class="w"> </span><span class="n">intent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Intent</span><span class="p">(</span><span class="n">Intent</span><span class="p">.</span><span class="na">ACTION_SEND</span><span class="p">);</span>
+<span class="n">intent</span><span class="p">.</span><span class="na">setData</span><span class="p">(</span><span class="n">contentUri</span><span class="p">);</span>
+<span class="n">intent</span><span class="p">.</span><span class="na">addFlags</span><span class="p">(</span><span class="n">Intent</span><span class="p">.</span><span class="na">FLAG_GRANT_READ_URI_PERMISSION</span><span class="w"> </span>
+<span class="w">              </span><span class="o">|</span><span class="w"> </span><span class="n">Intent</span><span class="p">.</span><span class="na">FLAG_GRANT_WRITE_URI_PERMISSION</span><span class="p">);</span>
+<span class="n">intent</span><span class="p">.</span><span class="na">putExtra</span><span class="p">(</span><span class="n">Intent</span><span class="p">.</span><span class="na">EXTRA_STREAM</span><span class="p">,</span><span class="w"> </span><span class="n">contentUri</span><span class="p">);</span>
+<span class="n">startActivity</span><span class="p">(</span><span class="n">intent</span><span class="p">);</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>权限持久化</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 接收方请求持久化权限</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">takeFlags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">intent</span><span class="p">.</span><span class="na">getFlags</span><span class="p">()</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span>
+<span class="w">    </span><span class="p">(</span><span class="n">Intent</span><span class="p">.</span><span class="na">FLAG_GRANT_READ_URI_PERMISSION</span><span class="w"> </span><span class="o">|</span>
+<span class="w">     </span><span class="n">Intent</span><span class="p">.</span><span class="na">FLAG_GRANT_WRITE_URI_PERMISSION</span><span class="p">);</span>
+
+<span class="n">getContentResolver</span><span class="p">().</span><span class="na">takePersistableUriPermission</span><span class="p">(</span>
+<span class="w">    </span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">takeFlags</span><span class="p">);</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>权限传递链</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code>权限传递示例：
+App A (拥有者) ──授予──&gt; App B ──传递──&gt; App C
+     │                    │              │
+     └────────检查─────────┴──────────────┘
+</code></pre></div>
+
+<h3 id="936">9.3.6 安全最佳实践</h3>
+<p>URI权限模型的安全要点：</p>
+<ol>
+<li>
+<p><strong>最小权限原则</strong>：
+   - 只授予必要的权限（读或写）
+   - 限制权限的时间范围
+   - 使用path-permission细化控制</p>
+</li>
+<li>
+<p><strong>权限验证</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Provider端验证调用者权限</span>
+<span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">enforceCallingPermission</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">uid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Binder</span><span class="p">.</span><span class="na">getCallingUid</span><span class="p">();</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">pid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Binder</span><span class="p">.</span><span class="na">getCallingPid</span><span class="p">();</span>
+
+<span class="w">    </span><span class="c1">// 检查是否有临时权限</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">getContext</span><span class="p">().</span><span class="na">checkUriPermission</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">pid</span><span class="p">,</span><span class="w"> </span><span class="n">uid</span><span class="p">,</span>
+<span class="w">            </span><span class="n">Intent</span><span class="p">.</span><span class="na">FLAG_GRANT_READ_URI_PERMISSION</span><span class="p">)</span><span class="w"> </span>
+<span class="w">            </span><span class="o">!=</span><span class="w"> </span><span class="n">PackageManager</span><span class="p">.</span><span class="na">PERMISSION_GRANTED</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SecurityException</span><span class="p">(</span><span class="s">&quot;Permission denied&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ol start="3">
+<li>
+<p><strong>防止权限泄露</strong>：
+   - 验证URI参数，防止路径遍历
+   - 不在日志中暴露敏感URI
+   - 及时撤销不需要的权限</p>
+</li>
+<li>
+<p><strong>审计与监控</strong>：
+   - 记录权限授予和访问日志
+   - 监控异常访问模式
+   - 定期审查权限配置</p>
+</li>
+</ol>
 <h2 id="94">9.4 数据变更通知机制</h2>
 <h3 id="941-contentobserver">9.4.1 ContentObserver实现原理</h3>
 <p>ContentObserver提供了高效的数据变更通知机制：</p>
@@ -699,6 +896,79 @@ Provider级别权限
 <span class="p">}</span>
 </code></pre></div>
 
+<h3 id="944">9.4.4 性能优化策略</h3>
+<p>数据变更通知的性能优化：</p>
+<ol>
+<li><strong>批量通知合并</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">BatchedContentProvider</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">ContentProvider</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">Handler</span><span class="w"> </span><span class="n">handler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Handler</span><span class="p">(</span><span class="n">Looper</span><span class="p">.</span><span class="na">getMainLooper</span><span class="p">());</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">Set</span><span class="o">&lt;</span><span class="n">Uri</span><span class="o">&gt;</span><span class="w"> </span><span class="n">pendingNotifications</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashSet</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">Runnable</span><span class="w"> </span><span class="n">notificationRunnable</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">scheduleNotification</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">pendingNotifications</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">pendingNotifications</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="n">uri</span><span class="p">);</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">notificationRunnable</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">notificationRunnable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">pendingNotifications</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">pendingUri</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">pendingNotifications</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                            </span><span class="n">getContext</span><span class="p">().</span><span class="na">getContentResolver</span><span class="p">()</span>
+<span class="w">                                </span><span class="p">.</span><span class="na">notifyChange</span><span class="p">(</span><span class="n">pendingUri</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">);</span>
+<span class="w">                        </span><span class="p">}</span>
+<span class="w">                        </span><span class="n">pendingNotifications</span><span class="p">.</span><span class="na">clear</span><span class="p">();</span>
+<span class="w">                        </span><span class="n">notificationRunnable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">                    </span><span class="p">}</span>
+<span class="w">                </span><span class="p">};</span>
+<span class="w">                </span><span class="n">handler</span><span class="p">.</span><span class="na">postDelayed</span><span class="p">(</span><span class="n">notificationRunnable</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p">);</span><span class="w"> </span><span class="c1">// 100ms延迟</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ol start="2">
+<li>
+<p><strong>通知粒度控制</strong>：
+   - 使用具体的URI而非通配符URI
+   - 实现分级通知策略
+   - 避免循环通知</p>
+</li>
+<li>
+<p><strong>观察者管理</strong>：
+   - 弱引用防止内存泄露
+   - 及时注销不需要的观察者
+   - 限制观察者数量</p>
+</li>
+</ol>
+<h3 id="945">9.4.5 跨进程通知的实现细节</h3>
+<p>ContentService中的通知分发机制：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">通知分发流程</span><span class="err">：</span>
+<span class="err">┌─────────────────────────────────────────────┐</span>
+<span class="err">│</span><span class="w">             </span><span class="n">ContentService</span><span class="w">                   </span><span class="err">│</span>
+<span class="err">│</span><span class="w">                                             </span><span class="err">│</span>
+<span class="err">│</span><span class="w">  </span><span class="n">ObserverNode</span><span class="w"> </span><span class="n">Tree</span><span class="w"> </span><span class="p">(</span><span class="n">URI树形结构</span><span class="p">)</span><span class="w">            </span><span class="err">│</span>
+<span class="err">│</span><span class="w">    </span><span class="o">/</span><span class="w">                                        </span><span class="err">│</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="nl">content</span><span class="p">:</span><span class="o">//</span><span class="w">                           </span><span class="err">│</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">authority1</span><span class="o">/</span><span class="w">                      </span><span class="err">│</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">path1</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="o">[</span><span class="n">Observer1, Observer2</span><span class="o">]</span><span class="err">│</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">path2</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="o">[</span><span class="n">Observer3</span><span class="o">]</span><span class="w">          </span><span class="err">│</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">authority2</span><span class="o">/</span><span class="w">                      </span><span class="err">│</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">       </span><span class="err">└──</span><span class="w"> </span><span class="k">data</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="o">[</span><span class="n">Observer4, Observer5</span><span class="o">]</span><span class="w"> </span><span class="err">│</span>
+<span class="err">│</span><span class="w">                                             </span><span class="err">│</span>
+<span class="err">│</span><span class="w">  </span><span class="n">notifyChange</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">遍历树找到匹配的观察者</span><span class="w"> </span><span class="err">│</span>
+<span class="err">│</span><span class="w">                                             </span><span class="err">│</span>
+<span class="err">│</span><span class="w">  </span><span class="n">批量发送Binder调用到各观察者进程</span><span class="w">            </span><span class="err">│</span>
+<span class="err">└─────────────────────────────────────────────┘</span>
+</code></pre></div>
+
+<p>关键优化点：</p>
+<ul>
+<li>使用树形结构加速URI匹配</li>
+<li>批量处理跨进程调用</li>
+<li>支持同步和异步通知模式</li>
+<li>死亡通知(DeathRecipient)自动清理</li>
+</ul>
 <h2 id="95-ios">9.5 与iOS数据共享机制对比</h2>
 <h3 id="951-ios-app-groups">9.5.1 iOS App Groups</h3>
 <p>iOS使用App Groups实现应用间数据共享：</p>
@@ -756,6 +1026,72 @@ Provider级别权限
    - 劣势：仅限文档型数据、性能开销较大</p>
 </li>
 </ol>
+<h3 id="954">9.5.4 设计理念差异</h3>
+<p>Android和iOS在数据共享设计上的根本差异：</p>
+<ol>
+<li>
+<p><strong>开放性 vs 封闭性</strong>：
+   - Android：任意应用间可共享（需权限）
+   - iOS：仅限同开发者或用户明确授权</p>
+</li>
+<li>
+<p><strong>数据模型</strong>：
+   - Android：结构化数据优先（类SQL接口）
+   - iOS：文件和对象优先</p>
+</li>
+<li>
+<p><strong>权限模型</strong>：
+   - Android：细粒度URI权限，动态授权
+   - iOS：基于entitlements和用户选择</p>
+</li>
+<li>
+<p><strong>生命周期管理</strong>：
+   - Android：Provider作为独立组件，系统管理
+   - iOS：Extension进程，更严格的资源限制</p>
+</li>
+</ol>
+<h3 id="955">9.5.5 鸿蒙系统的数据共享机制</h3>
+<p>鸿蒙系统(HarmonyOS)提供了独特的数据共享方案：</p>
+<ol>
+<li><strong>分布式数据服务</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code>鸿蒙分布式数据架构：
+┌─────────────────────────────────────┐
+│        分布式数据服务                │
+│  ┌─────────┐  ┌─────────┐         │
+│  │设备A应用 │  │设备B应用 │         │
+│  └────┬────┘  └────┬────┘         │
+│       │            │               │
+│  ┌────┴────────────┴────┐         │
+│  │ 分布式数据库API      │         │
+│  └──────────┬───────────┘         │
+│             │                      │
+│  ┌──────────┴───────────┐         │
+│  │  同步与冲突解决       │         │
+│  └──────────────────────┘         │
+└─────────────────────────────────────┘
+</code></pre></div>
+
+<ol start="2">
+<li>
+<p><strong>DataAbility（类似ContentProvider）</strong>：
+   - 统一的数据访问接口
+   - 支持跨设备数据同步
+   - 原生分布式能力</p>
+</li>
+<li>
+<p><strong>权限管控</strong>：
+   - 基于ACL的访问控制
+   - 支持跨设备权限同步
+   - 用户隐私优先</p>
+</li>
+</ol>
+<p>对比要点：</p>
+<ul>
+<li>鸿蒙原生支持跨设备数据共享</li>
+<li>更强调分布式场景</li>
+<li>权限模型更复杂但更灵活</li>
+</ul>
 <h2 id="96">9.6 高级特性与优化</h2>
 <h3 id="961">9.6.1 流式数据传输</h3>
 <p>ContentProvider支持大文件和流式数据：</p>
@@ -819,6 +1155,109 @@ Provider级别权限
 <span class="p">}</span>
 </code></pre></div>
 
+<h3 id="964">9.6.4 异步查询模式</h3>
+<p>实现高性能的异步查询：</p>
+<ol>
+<li><strong>使用CursorLoader</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 在Activity/Fragment中使用</span>
+<span class="n">LoaderManager</span><span class="p">.</span><span class="na">LoaderCallbacks</span><span class="o">&lt;</span><span class="n">Cursor</span><span class="o">&gt;</span><span class="w"> </span><span class="n">callbacks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">LoaderManager</span><span class="p">.</span><span class="na">LoaderCallbacks</span><span class="o">&lt;</span><span class="n">Cursor</span><span class="o">&gt;</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nd">@Override</span>
+<span class="w">        </span><span class="kd">public</span><span class="w"> </span><span class="n">Loader</span><span class="o">&lt;</span><span class="n">Cursor</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">onCreateLoader</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">Bundle</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">CursorLoader</span><span class="p">(</span>
+<span class="w">                </span><span class="n">context</span><span class="p">,</span>
+<span class="w">                </span><span class="n">uri</span><span class="p">,</span>
+<span class="w">                </span><span class="n">projection</span><span class="p">,</span>
+<span class="w">                </span><span class="n">selection</span><span class="p">,</span>
+<span class="w">                </span><span class="n">selectionArgs</span><span class="p">,</span>
+<span class="w">                </span><span class="n">sortOrder</span>
+<span class="w">            </span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="nd">@Override</span>
+<span class="w">        </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onLoadFinished</span><span class="p">(</span><span class="n">Loader</span><span class="o">&lt;</span><span class="n">Cursor</span><span class="o">&gt;</span><span class="w"> </span><span class="n">loader</span><span class="p">,</span><span class="w"> </span><span class="n">Cursor</span><span class="w"> </span><span class="n">data</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">// 处理查询结果</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">};</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>使用AsyncQueryHandler</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="n">AsyncQueryHandler</span><span class="w"> </span><span class="n">queryHandler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AsyncQueryHandler</span><span class="p">(</span><span class="n">contentResolver</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">onQueryComplete</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">token</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">cookie</span><span class="p">,</span><span class="w"> </span><span class="n">Cursor</span><span class="w"> </span><span class="n">cursor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 处理查询结果</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+
+<span class="n">queryHandler</span><span class="p">.</span><span class="na">startQuery</span><span class="p">(</span>
+<span class="w">    </span><span class="n">token</span><span class="p">,</span>
+<span class="w">    </span><span class="n">cookie</span><span class="p">,</span>
+<span class="w">    </span><span class="n">uri</span><span class="p">,</span>
+<span class="w">    </span><span class="n">projection</span><span class="p">,</span>
+<span class="w">    </span><span class="n">selection</span><span class="p">,</span>
+<span class="w">    </span><span class="n">selectionArgs</span><span class="p">,</span>
+<span class="w">    </span><span class="n">sortOrder</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>协程支持（Kotlin）</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="kd">suspend</span><span class="w"> </span><span class="kd">fun</span><span class="w"> </span><span class="nf">queryAsync</span><span class="p">(</span><span class="n">uri</span><span class="p">:</span><span class="w"> </span><span class="n">Uri</span><span class="p">):</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">Data</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">withContext</span><span class="p">(</span><span class="n">Dispatchers</span><span class="p">.</span><span class="na">IO</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">contentResolver</span><span class="p">.</span><span class="na">query</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">projection</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="o">?.</span><span class="na">use</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">-&gt;</span>
+<span class="w">        </span><span class="n">cursor</span><span class="p">.</span><span class="na">mapToList</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">it</span><span class="p">.</span><span class="na">toData</span><span class="p">()</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="o">?:</span><span class="w"> </span><span class="n">emptyList</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="965">9.6.5 缓存策略设计</h3>
+<p>高效的ContentProvider缓存实现：</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">CachedContentProvider</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">ContentProvider</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">LruCache</span><span class="o">&lt;</span><span class="n">Uri</span><span class="p">,</span><span class="w"> </span><span class="n">CacheEntry</span><span class="o">&gt;</span><span class="w"> </span><span class="n">cache</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">LruCache</span><span class="o">&lt;&gt;</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span>
+
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">class</span> <span class="nc">CacheEntry</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">final</span><span class="w"> </span><span class="n">Cursor</span><span class="w"> </span><span class="n">cursor</span><span class="p">;</span>
+<span class="w">        </span><span class="kd">final</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">timestamp</span><span class="p">;</span>
+
+<span class="w">        </span><span class="n">CacheEntry</span><span class="p">(</span><span class="n">Cursor</span><span class="w"> </span><span class="n">cursor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">this</span><span class="p">.</span><span class="na">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cursor</span><span class="p">;</span>
+<span class="w">            </span><span class="k">this</span><span class="p">.</span><span class="na">timestamp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SystemClock</span><span class="p">.</span><span class="na">elapsedRealtime</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">isExpired</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">SystemClock</span><span class="p">.</span><span class="na">elapsedRealtime</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">timestamp</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">60000</span><span class="p">;</span><span class="w"> </span><span class="c1">// 60秒</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Cursor</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">projection</span><span class="p">,</span><span class="w"> </span><span class="p">...)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 检查缓存</span>
+<span class="w">        </span><span class="n">CacheEntry</span><span class="w"> </span><span class="n">entry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cache</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">uri</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">entry</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="n">entry</span><span class="p">.</span><span class="na">isExpired</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">CachedCursor</span><span class="p">(</span><span class="n">entry</span><span class="p">.</span><span class="na">cursor</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// 执行查询</span>
+<span class="w">        </span><span class="n">Cursor</span><span class="w"> </span><span class="n">cursor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">performQuery</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">projection</span><span class="p">,</span><span class="w"> </span><span class="p">...);</span>
+
+<span class="w">        </span><span class="c1">// 更新缓存</span>
+<span class="w">        </span><span class="n">cache</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">CacheEntry</span><span class="p">(</span><span class="n">cursor</span><span class="p">));</span>
+
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">cursor</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>缓存策略要点：</p>
+<ul>
+<li>使用LRU缓存限制内存使用</li>
+<li>设置合理的过期时间</li>
+<li>监听数据变更自动失效缓存</li>
+<li>考虑多级缓存（内存+磁盘）</li>
+</ul>
 <h2 id="97">9.7 安全考虑</h2>
 <h3 id="971-sql">9.7.1 SQL注入防护</h3>
 <p>ContentProvider必须防范SQL注入攻击：</p>
@@ -876,6 +1315,92 @@ Provider级别权限
 <p><strong>数据最小化</strong>：
    - 仅返回必要字段
    - 实施数据脱敏</p>
+</li>
+</ol>
+<h3 id="974">9.7.4 安全编码实践</h3>
+<p>ContentProvider安全开发指南：</p>
+<ol>
+<li><strong>输入验证</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">validateInput</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">ContentValues</span><span class="w"> </span><span class="n">values</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// URI验证</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">isValidUri</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">IllegalArgumentException</span><span class="p">(</span><span class="s">&quot;Invalid URI&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 参数验证</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">key</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">values</span><span class="p">.</span><span class="na">keySet</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Object</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">values</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">isValidValue</span><span class="p">(</span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">IllegalArgumentException</span><span class="p">(</span><span class="s">&quot;Invalid value for &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">key</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>权限分离</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">SecureContentProvider</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">ContentProvider</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 分离读写操作的权限检查</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">READ_PERMISSION</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;com.example.READ&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">WRITE_PERMISSION</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;com.example.WRITE&quot;</span><span class="p">;</span>
+
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Cursor</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="p">...)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">enforcePermission</span><span class="p">(</span><span class="n">READ_PERMISSION</span><span class="p">,</span><span class="w"> </span><span class="n">uri</span><span class="p">);</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kd">super</span><span class="p">.</span><span class="na">query</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="p">...);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Uri</span><span class="w"> </span><span class="nf">insert</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">ContentValues</span><span class="w"> </span><span class="n">values</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">enforcePermission</span><span class="p">(</span><span class="n">WRITE_PERMISSION</span><span class="p">,</span><span class="w"> </span><span class="n">uri</span><span class="p">);</span>
+<span class="w">        </span><span class="n">validateInput</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">values</span><span class="p">);</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kd">super</span><span class="p">.</span><span class="na">insert</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">values</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ol start="3">
+<li><strong>安全的文件操作</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="nd">@Override</span>
+<span class="kd">public</span><span class="w"> </span><span class="n">ParcelFileDescriptor</span><span class="w"> </span><span class="nf">openFile</span><span class="p">(</span><span class="n">Uri</span><span class="w"> </span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">mode</span><span class="p">)</span><span class="w"> </span>
+<span class="w">        </span><span class="kd">throws</span><span class="w"> </span><span class="n">FileNotFoundException</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 验证文件路径，防止路径遍历</span>
+<span class="w">    </span><span class="n">File</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getFileForUri</span><span class="p">(</span><span class="n">uri</span><span class="p">);</span>
+<span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">canonicalPath</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">file</span><span class="p">.</span><span class="na">getCanonicalPath</span><span class="p">();</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">canonicalPath</span><span class="p">.</span><span class="na">startsWith</span><span class="p">(</span><span class="n">getFilesDir</span><span class="p">().</span><span class="na">getCanonicalPath</span><span class="p">()))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SecurityException</span><span class="p">(</span><span class="s">&quot;Access denied&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 检查文件访问权限</span>
+<span class="w">    </span><span class="n">enforceFilePermission</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">mode</span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">ParcelFileDescriptor</span><span class="p">.</span><span class="na">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span><span class="w"> </span><span class="n">parseMode</span><span class="p">(</span><span class="n">mode</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="975">9.7.5 隐私合规考虑</h3>
+<p>ContentProvider的隐私保护措施：</p>
+<ol>
+<li>
+<p><strong>数据最小化原则</strong>：
+   - 仅收集必要数据
+   - 定期清理过期数据
+   - 提供数据删除接口</p>
+</li>
+<li>
+<p><strong>用户控制</strong>：
+   - 提供数据导出功能
+   - 支持选择性数据共享
+   - 实现数据删除请求</p>
+</li>
+<li>
+<p><strong>透明度</strong>：
+   - 记录数据访问日志
+   - 提供数据使用说明
+   - 通知用户数据共享行为</p>
 </li>
 </ol>
 <h2 id="_2">本章小结</h2>

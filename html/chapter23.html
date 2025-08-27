@@ -303,6 +303,20 @@
 <li><strong>功耗效率</strong>：EAS虽然考虑能效，但策略相对保守</li>
 <li><strong>场景适配</strong>：缺乏针对特定使用场景的优化</li>
 </ol>
+<p><strong>CFS调度器的核心机制</strong>：</p>
+<ul>
+<li><strong>虚拟运行时间（vruntime）</strong>：每个任务维护vruntime，调度器选择vruntime最小的任务</li>
+<li><strong>红黑树组织</strong>：任务按vruntime组织在红黑树中，O(log n)复杂度</li>
+<li><strong>负载权重（load weight）</strong>：nice值转换为权重，影响时间片分配</li>
+<li><strong>调度周期（sched_latency_ns）</strong>：默认6ms，所有任务运行一轮的目标时间</li>
+</ul>
+<p><strong>EAS能效感知调度</strong>：</p>
+<ul>
+<li><strong>能效模型</strong>：每个CPU核心的功耗-性能曲线</li>
+<li><strong>任务放置决策</strong>：通过<code>find_energy_efficient_cpu</code>选择最优核心</li>
+<li><strong>频率调节集成</strong>：与cpufreq governor协同工作</li>
+<li><strong>thermal压力感知</strong>：考虑温度对性能的影响</li>
+</ul>
 <p>厂商调度器修改主要目标：</p>
 <ul>
 <li>提升用户交互响应速度（降低触摸延迟、滑动卡顿）</li>
@@ -310,6 +324,13 @@
 <li>延长续航时间（智能功耗控制）</li>
 <li>改善多任务切换体验</li>
 </ul>
+<p><strong>厂商定制的技术手段</strong>：</p>
+<ol>
+<li><strong>调度类扩展</strong>：在<code>sched_class</code>基础上增加厂商特定调度类</li>
+<li><strong>任务分组机制</strong>：扩展cgroup，实现更细粒度的资源控制</li>
+<li><strong>预测算法集成</strong>：使用机器学习预测任务行为</li>
+<li><strong>硬件特性利用</strong>：充分利用ARM big.LITTLE、DynamIQ等特性</li>
+</ol>
 <h3 id="2312-miuimi-scheduler">23.1.2 小米MIUI调度器：MI Scheduler</h3>
 <p>小米在MIUI中实现了MI Scheduler，主要特性包括：</p>
 <p><strong>任务分类机制</strong>：</p>
@@ -318,17 +339,69 @@
 <li>通过<code>task_struct</code>扩展字段记录任务类型</li>
 <li>基于用户行为动态调整任务优先级</li>
 </ul>
+<p><strong>详细的任务分类策略</strong>：</p>
+<div class="codehilite"><pre><span></span><code>VIP任务（最高优先级）：
+
+<span class="k">-</span> 当前前台应用的UI线程
+<span class="k">-</span> 触摸事件处理线程
+<span class="k">-</span> 音频播放线程
+<span class="k">-</span> 系统关键服务（SystemUI、Launcher）
+
+前台任务：
+
+<span class="k">-</span> 可见Activity的工作线程
+<span class="k">-</span> 前台Service
+<span class="k">-</span> 正在执行动画的View
+
+后台任务：
+
+<span class="k">-</span> 不可见应用的进程
+<span class="k">-</span> 后台Service
+<span class="k">-</span> 缓存进程
+
+系统任务：
+
+<span class="k">-</span> system_server主线程
+<span class="k">-</span> SurfaceFlinger
+<span class="k">-</span> Binder工作线程
+</code></pre></div>
+
 <p><strong>智能加速技术</strong>：</p>
 <ul>
 <li>检测用户触摸事件，通过<code>input_event_boost</code>提升相关进程优先级</li>
 <li>应用启动加速：识别启动阶段，临时提升CPU频率和优先级</li>
 <li>动画渲染优先：确保UI线程和渲染线程获得足够CPU时间</li>
 </ul>
+<p><strong>应用启动优化流程</strong>：</p>
+<ol>
+<li><strong>启动检测</strong>：通过监控<code>ActivityManagerService</code>识别应用启动</li>
+<li><strong>资源预分配</strong>：提前解冻CPU核心，预热缓存</li>
+<li><strong>优先级提升</strong>：将启动进程标记为VIP，持续500ms</li>
+<li><strong>频率锁定</strong>：CPU频率锁定在较高水平</li>
+<li><strong>IO优先</strong>：提升相关IO操作优先级</li>
+</ol>
 <p><strong>核心调度优化</strong>：</p>
 <ul>
 <li>修改<code>select_task_rq_fair</code>函数，优先将VIP任务调度到大核</li>
 <li>实现亲和性绑定，将关键服务固定在特定CPU核心</li>
 <li>动态调整<code>sched_latency_ns</code>参数，降低交互延迟</li>
+</ul>
+<p><strong>MI Turbo技术栈</strong>：</p>
+<div class="codehilite"><pre><span></span><code>应用层：Game Turbo / System Turbo
+  ↓
+框架层：Performance Manager / Resource Monitor  
+  ↓
+Native层：Boost Framework / Predictor Engine
+  ↓
+内核层：MI Scheduler / CPU Governor / Memory Manager
+</code></pre></div>
+
+<p><strong>实时性能监控</strong>：</p>
+<ul>
+<li>通过<code>/proc/mi_sched/</code>导出调度统计信息</li>
+<li>监控任务等待时间、CPU利用率、调度延迟</li>
+<li>基于监控数据动态调整策略参数</li>
+<li>支持通过property动态开关特性</li>
 </ul>
 <h3 id="2313-oppooneplus-oplus">23.1.3 OPPO/OnePlus Oplus调度器</h3>
 <p>OPPO的Oplus调度器是其ColorOS的核心优化之一：</p>
@@ -338,11 +411,37 @@
 <li>动态调整渲染相关线程的优先级</li>
 <li>实现<code>frame_boost</code>机制，确保稳定帧率</li>
 </ul>
+<p><strong>VSYNC驱动的调度优化</strong>：</p>
+<div class="codehilite"><pre><span></span><code>VSYNC信号产生
+    ↓
+检测帧渲染开始
+    ↓
+识别相关渲染线程链
+    ↓
+boost优先级（持续16ms）
+    ↓
+确保帧按时完成
+</code></pre></div>
+
+<p><strong>帧率稳定性算法</strong>：</p>
+<ol>
+<li><strong>Jank检测</strong>：监控每帧渲染时间，识别掉帧</li>
+<li><strong>预测调度</strong>：基于历史帧时间预测下一帧负载</li>
+<li><strong>动态boost</strong>：根据预测结果调整boost强度</li>
+<li><strong>反馈控制</strong>：根据实际帧率调整策略</li>
+</ol>
 <p><strong>UI First策略</strong>：</p>
 <ul>
 <li>识别UI线程、渲染线程、动画线程</li>
 <li>通过<code>cgroup</code>机制为UI相关任务预留资源</li>
 <li>修改<code>check_preempt_curr</code>逻辑，UI任务可抢占其他任务</li>
+</ul>
+<p><strong>UI线程识别机制</strong>：</p>
+<ul>
+<li>监控<code>Handler</code>消息队列，识别UI操作</li>
+<li>跟踪<code>Choreographer</code>回调，定位渲染线程</li>
+<li>分析Binder调用链，找出相关服务线程</li>
+<li>建立线程依赖图，整体优化</li>
 </ul>
 <p><strong>负载预测算法</strong>：</p>
 <ul>
@@ -350,6 +449,42 @@
 <li>使用机器学习模型优化调度决策</li>
 <li>实现<code>load_predictor</code>模块进行实时预测</li>
 </ul>
+<p><strong>机器学习模型架构</strong>：</p>
+<div class="codehilite"><pre><span></span><code>输入特征：
+
+- CPU使用历史（最近100ms）
+- 内存访问模式
+- IO等待时间
+- 任务切换频率
+- 温度状态
+
+模型结构：
+
+- 轻量级LSTM网络
+- 3层全连接层
+- 输出：未来10ms负载预测
+
+部署方式：
+
+- TFLite模型运行在内核态
+- 每10ms更新一次预测
+- 低功耗DSP加速
+</code></pre></div>
+
+<p><strong>Oplus资源调度框架</strong>：</p>
+<ul>
+<li><strong>ORMS（Oplus Resource Management System）</strong>：统一资源管理</li>
+<li><strong>支持插件化</strong>：第三方应用可注册优化策略</li>
+<li><strong>云端配置</strong>：通过OTA更新调度参数</li>
+<li><strong>A/B测试</strong>：支持不同用户群体使用不同策略</li>
+</ul>
+<p><strong>与游戏的深度集成</strong>：</p>
+<ol>
+<li><strong>Game Space识别</strong>：自动识别游戏应用</li>
+<li><strong>GPU调度联动</strong>：CPU-GPU协同优化</li>
+<li><strong>网络加速</strong>：游戏数据包优先传输</li>
+<li><strong>温控策略</strong>：平衡性能与发热</li>
+</ol>
 <h3 id="2314-eas">23.1.4 华为EAS+调度优化</h3>
 <p>华为在原生EAS基础上进行了深度优化：</p>
 <p><strong>AI调度引擎</strong>：</p>
@@ -358,17 +493,109 @@
 <li>识别应用使用模式（游戏、视频、社交等）</li>
 <li>基于场景的动态调度策略</li>
 </ul>
+<p><strong>华为AI调度架构</strong>：</p>
+<div class="codehilite"><pre><span></span><code>应用场景识别层：
+
+- 通过包名识别应用类型
+- 分析API调用模式
+- 监控资源使用特征
+    ↓
+AI推理层（NPU加速）：
+
+- 场景分类模型
+- 负载预测模型  
+- 能效优化模型
+    ↓
+调度决策层：
+
+- 核心分配策略
+- 频率调节策略
+- 任务迁移策略
+    ↓
+执行层：
+
+- EAS+调度器
+- 能效管理器
+- 热管理器
+</code></pre></div>
+
+<p><strong>场景化调度策略</strong>：</p>
+<ol>
+<li>
+<p><strong>游戏场景</strong>：
+   - 识别渲染线程和物理引擎线程
+   - 锁定大核运行，减少迁移
+   - GPU优先级提升，CPU让路
+   - 激进的boost策略</p>
+</li>
+<li>
+<p><strong>视频场景</strong>：
+   - 识别解码线程
+   - 优先使用硬件解码器
+   - CPU降频省电
+   - 预测性缓冲管理</p>
+</li>
+<li>
+<p><strong>社交应用</strong>：
+   - 快速响应消息通知
+   - 图片加载优先
+   - 后台同步降级
+   - 省电优先策略</p>
+</li>
+</ol>
 <p><strong>能效曲线优化</strong>：</p>
 <ul>
 <li>重新标定各CPU核心的能效曲线</li>
 <li>考虑温度对性能的影响</li>
 <li>实现<code>thermal_aware_scheduling</code></li>
 </ul>
+<p><strong>动态能效模型</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="err">静态模型（出厂标定）：</span>
+<span class="n">Power</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">C</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">V²</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">P_static</span>
+
+<span class="err">动态修正因子：</span>
+
+<span class="o">-</span><span class="w"> </span><span class="err">温度修正：</span><span class="n">k_temp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">T</span><span class="p">)</span>
+<span class="o">-</span><span class="w"> </span><span class="err">老化修正：</span><span class="n">k_age</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">usage_time</span><span class="p">)</span>
+<span class="o">-</span><span class="w"> </span><span class="err">负载修正：</span><span class="n">k_load</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">IPC</span><span class="p">,</span><span class="w"> </span><span class="n">cache_miss</span><span class="p">)</span>
+
+<span class="err">实际功耗：</span>
+<span class="n">Power_real</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Power</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">k_temp</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">k_age</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">k_load</span>
+</code></pre></div>
+
 <p><strong>任务放置优化</strong>：</p>
 <ul>
 <li>改进<code>find_energy_efficient_cpu</code>算法</li>
 <li>考虑缓存亲和性和内存访问延迟</li>
 <li>支持异构计算任务的智能分配</li>
+</ul>
+<p><strong>缓存感知调度</strong>：</p>
+<ol>
+<li>
+<p><strong>L2缓存亲和性</strong>：
+   - 跟踪任务的缓存占用
+   - 优先在同簇内迁移
+   - 避免缓存污染</p>
+</li>
+<li>
+<p><strong>L3缓存优化</strong>：
+   - 大数据集任务优先大核
+   - 考虑缓存竞争
+   - 动态缓存分区</p>
+</li>
+<li>
+<p><strong>内存带宽感知</strong>：
+   - 监控DDR带宽使用
+   - 分散高带宽任务
+   - 避免带宽瓶颈</p>
+</li>
+</ol>
+<p><strong>华为智慧调度特色功能</strong>：</p>
+<ul>
+<li><strong>GPU Turbo协同</strong>：CPU-GPU联合调度优化</li>
+<li><strong>Link Turbo集成</strong>：网络延迟敏感任务优先</li>
+<li><strong>方舟编译器优化</strong>：ART运行时深度集成</li>
+<li><strong>分布式调度</strong>：多设备协同计算支持</li>
 </ul>
 <h3 id="2315-linux-cfseas">23.1.5 与原生Linux CFS/EAS对比</h3>
 <p>| 特性 | Linux CFS/EAS | 厂商定制调度器 |</p>
@@ -408,12 +635,82 @@
 </tr>
 </tbody>
 </table>
+<p><strong>详细对比分析</strong>：</p>
+<p><strong>1. 算法复杂度对比</strong>：</p>
+<div class="codehilite"><pre><span></span><code>CFS复杂度：
+
+- 任务选择：O(log n) - 红黑树
+- 负载均衡：O(n) - 遍历所有CPU
+- 任务迁移：O(1) - 直接操作
+
+厂商调度器复杂度：
+
+- 任务选择：O(log n) + O(k) - 红黑树+分类开销
+- 负载均衡：O(n²) - 考虑更多因素
+- 任务迁移：O(m) - 缓存预热等额外操作
+</code></pre></div>
+
+<p><strong>2. 延迟特性对比</strong>：
+| 场景 | CFS平均延迟 | 厂商优化后 | 提升幅度 |</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>CFS平均延迟</th>
+<th>厂商优化后</th>
+<th>提升幅度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>触摸响应</td>
+<td>50-100ms</td>
+<td>10-30ms</td>
+<td>70%</td>
+</tr>
+<tr>
+<td>应用启动</td>
+<td>800-1200ms</td>
+<td>400-600ms</td>
+<td>50%</td>
+</tr>
+<tr>
+<td>任务切换</td>
+<td>20-50ms</td>
+<td>5-15ms</td>
+<td>75%</td>
+</tr>
+<tr>
+<td>游戏帧率</td>
+<td>波动±10fps</td>
+<td>波动±3fps</td>
+<td>70%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>3. 功耗影响分析</strong>：
+- <strong>CFS/EAS</strong>：保守的功耗策略，避免频繁调整
+- <strong>厂商定制</strong>：激进的动态调整，短期功耗可能增加5-10%
+- <strong>长期收益</strong>：通过更快完成任务，总体功耗降低15-20%</p>
 <p>关键差异分析：</p>
 <ol>
 <li><strong>设计理念</strong>：CFS追求通用性和公平性，厂商追求用户体验</li>
 <li><strong>优化目标</strong>：Linux注重服务器场景，厂商专注移动设备</li>
 <li><strong>实现复杂度</strong>：厂商调度器更复杂，但针对性更强</li>
 </ol>
+<p><strong>4. 可维护性对比</strong>：
+- <strong>上游内核</strong>：代码规范，社区维护，稳定性高
+- <strong>厂商定制</strong>：代码复杂，版本分裂，升级困难
+- <strong>技术债务</strong>：每次内核升级都需要重新适配</p>
+<p><strong>5. 兼容性考虑</strong>：</p>
+<div class="codehilite"><pre><span></span><code>厂商需要处理的兼容性问题：
+
+1. 内核版本升级时的API变化
+2. 不同SoC平台的差异
+3. Google CTS测试要求
+4. 第三方内核模块兼容
+</code></pre></div>
+
 <h2 id="232">23.2 内存管理优化</h2>
 <h3 id="2321">23.2.1 内存压缩技术演进</h3>
 <p>Android设备内存容量不断增长，但应用内存需求增长更快。厂商通过内存压缩技术缓解内存压力：</p>
@@ -424,6 +721,54 @@
 <li>OPPO实现动态压缩算法切换</li>
 <li>华为开发高效压缩硬件加速器</li>
 </ul>
+<p><strong>压缩算法对比</strong>：
+| 算法 | 压缩率 | 压缩速度 | 解压速度 | CPU占用 | 适用场景 |</p>
+<table>
+<thead>
+<tr>
+<th>算法</th>
+<th>压缩率</th>
+<th>压缩速度</th>
+<th>解压速度</th>
+<th>CPU占用</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LZ4</td>
+<td>2.1:1</td>
+<td>700MB/s</td>
+<td>3500MB/s</td>
+<td>低</td>
+<td>默认选择</td>
+</tr>
+<tr>
+<td>ZSTD-1</td>
+<td>2.8:1</td>
+<td>400MB/s</td>
+<td>1200MB/s</td>
+<td>中</td>
+<td>内存紧张</td>
+</tr>
+<tr>
+<td>ZSTD-3</td>
+<td>3.2:1</td>
+<td>200MB/s</td>
+<td>1000MB/s</td>
+<td>高</td>
+<td>极限压缩</td>
+</tr>
+<tr>
+<td>LZ4HC</td>
+<td>2.5:1</td>
+<td>100MB/s</td>
+<td>3200MB/s</td>
+<td>高</td>
+<td>冷数据</td>
+</tr>
+</tbody>
+</table>
 <p><strong>压缩策略优化</strong>：</p>
 <ol>
 <li><strong>分级压缩</strong>：根据内存页面访问频率选择压缩级别</li>
@@ -431,11 +776,76 @@
 <li><strong>并行压缩</strong>：利用多核并行处理压缩任务</li>
 <li><strong>压缩时机</strong>：基于内存压力和CPU负载动态调整</li>
 </ol>
+<p><strong>智能压缩决策算法</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="err">压缩收益评估：</span>
+<span class="n">benefit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">original_size</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">compressed_size</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">compression_time</span>
+
+<span class="err">动态阈值调整：</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">memory_pressure</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">HIGH</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">LOW_THRESHOLD</span><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="err">激进压缩</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">cpu_load</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">HIGH</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HIGH_THRESHOLD</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="err">保守压缩</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">NORMAL_THRESHOLD</span>
+<span class="p">}</span>
+
+<span class="err">压缩决策：</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">benefit</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">threshold</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">page_type</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">INCOMPRESSIBLE</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">select_algorithm</span><span class="p">(</span><span class="n">page_access_frequency</span><span class="p">)</span>
+<span class="w">    </span><span class="n">compress_page</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div>
+
 <p><strong>关键技术实现</strong>：</p>
 <ul>
 <li>修改<code>zram_bvec_write</code>实现智能压缩</li>
 <li>扩展<code>struct zram_stats</code>增加压缩效率统计</li>
 <li>实现<code>compression_predictor</code>预测压缩收益</li>
+</ul>
+<p><strong>页面类型识别</strong>：</p>
+<ol>
+<li>
+<p><strong>可压缩性分析</strong>：
+   - 零页面：直接标记，不占用空间
+   - 重复模式：使用RLE编码
+   - 随机数据：标记为不可压缩
+   - 文本数据：高压缩率</p>
+</li>
+<li>
+<p><strong>访问模式分类</strong>：
+   - 热页面：频繁访问，使用快速算法
+   - 温页面：偶尔访问，平衡算法
+   - 冷页面：很少访问，最大压缩</p>
+</li>
+</ol>
+<p><strong>硬件加速支持</strong>：</p>
+<div class="codehilite"><pre><span></span><code>华为压缩加速器架构：
+CPU → DMA → 压缩引擎 → ZRAM存储
+         ↓
+    中断通知 ← 完成信号
+
+优势：
+
+- CPU占用降低80%
+- 压缩速度提升3倍
+- 支持多流并发
+- 功耗降低60%
+</code></pre></div>
+
+<p><strong>厂商特色实现</strong>：</p>
+<ul>
+<li><strong>小米ZRAM+</strong>：</li>
+<li>自适应压缩算法选择</li>
+<li>基于应用的压缩策略</li>
+<li>
+<p>压缩率实时监控</p>
+</li>
+<li>
+<p><strong>OPPO Memory Guard</strong>：</p>
+</li>
+<li>压缩前数据去重</li>
+<li>增量压缩技术</li>
+<li>压缩缓存优化</li>
 </ul>
 <h3 id="2322">23.2.2 内存融合技术</h3>
 <p>内存融合是将存储空间虚拟为内存使用的技术：</p>

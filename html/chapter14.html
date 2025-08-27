@@ -311,24 +311,32 @@
 <li>KeyStore类：Java层API入口，提供密钥的生成、导入、使用接口</li>
 <li>KeyGenerator/KeyPairGenerator：密钥生成器，支持对称和非对称密钥</li>
 <li>Cipher/Signature：加密和签名操作接口</li>
+<li>KeyChain API：系统级密钥和证书管理，支持用户选择证书</li>
+<li>Android Keystore Provider：集成到Java Cryptography Architecture (JCA)</li>
 </ul>
 <p><strong>系统服务层</strong></p>
 <ul>
 <li>keystore守护进程：运行在独立进程中，管理密钥存储和访问控制</li>
 <li>KeystoreService：Binder服务接口，处理应用请求</li>
 <li>密钥数据库：使用加密的SQLite存储密钥元数据</li>
+<li>权限管理：基于UID的访问控制，SELinux策略增强</li>
+<li>密钥别名命名空间：防止应用间密钥冲突</li>
 </ul>
 <p><strong>HAL层</strong></p>
 <ul>
 <li>Keymaster HAL：硬件抽象层接口，定义标准密钥操作</li>
 <li>IKeymasterDevice：HIDL/AIDL接口定义</li>
 <li>厂商实现：对接具体硬件安全模块</li>
+<li>HAL版本兼容：支持多版本Keymaster共存</li>
+<li>RemotelyProvisionedComponent：远程密钥配置支持</li>
 </ul>
 <p><strong>硬件层</strong></p>
 <ul>
 <li>TEE实现：在可信执行环境中运行的Keymaster TA</li>
 <li>独立安全芯片：如Titan M等专用安全处理器</li>
 <li>SoC集成方案：集成在主SoC中的安全子系统</li>
+<li>硬件密钥派生：基于芯片唯一密钥（HUK）</li>
+<li>安全存储：RPMB或独立闪存</li>
 </ul>
 <h3 id="_1">密钥存储机制</h3>
 <p>Android支持多种密钥存储后端：</p>
@@ -337,23 +345,38 @@
 <li>使用keystore守护进程的主密钥加密</li>
 <li>存储在/data/misc/keystore目录</li>
 <li>主密钥派生自用户凭据（PIN/密码/图案）</li>
+<li>AES-GCM加密保护密钥材料</li>
+<li>每用户独立的加密密钥</li>
 </ul>
 <p><strong>硬件密钥存储</strong></p>
 <ul>
 <li>密钥材料永不离开安全硬件</li>
 <li>仅返回密钥句柄（key blob）给系统</li>
 <li>支持密钥使用限制（如需要用户认证）</li>
+<li>密钥操作通过HAL调用在安全环境执行</li>
+<li>支持密钥包装导出（仅限特定场景）</li>
 </ul>
 <p><strong>密钥Blob格式</strong></p>
-<div class="codehilite"><pre><span></span><code>KeyBlob {
-    version: u8,
-    key_material: encrypted_bytes,
-    auth_tags: AuthorizationSet,
-    hw_enforced: AuthorizationSet,
-    sw_enforced: AuthorizationSet,
-}
+<div class="codehilite"><pre><span></span><code><span class="nt">KeyBlob</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">version</span><span class="p">:</span><span class="w"> </span><span class="n">u8</span><span class="p">,</span>
+<span class="w">    </span><span class="n">key_material</span><span class="o">:</span><span class="w"> </span><span class="n">encrypted_bytes</span><span class="p">,</span>
+<span class="w">    </span><span class="n">auth_tags</span><span class="o">:</span><span class="w"> </span><span class="n">AuthorizationSet</span><span class="p">,</span>
+<span class="w">    </span><span class="n">hw_enforced</span><span class="o">:</span><span class="w"> </span><span class="n">AuthorizationSet</span><span class="p">,</span>
+<span class="w">    </span><span class="n">sw_enforced</span><span class="o">:</span><span class="w"> </span><span class="n">AuthorizationSet</span><span class="p">,</span>
+<span class="w">    </span><span class="n">nonce</span><span class="o">:</span><span class="w"> </span><span class="cp">[</span><span class="nx">u8</span><span class="p">;</span><span class="w"> </span><span class="mi">12</span><span class="cp">]</span><span class="p">,</span><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="n">GCM</span><span class="w"> </span><span class="n">nonce</span>
+<span class="w">    </span><span class="n">tag</span><span class="o">:</span><span class="w"> </span><span class="cp">[</span><span class="nx">u8</span><span class="p">;</span><span class="w"> </span><span class="mi">16</span><span class="cp">]</span><span class="p">,</span><span class="w">    </span><span class="o">//</span><span class="w"> </span><span class="n">GCM</span><span class="w"> </span><span class="n">authentication</span><span class="w"> </span><span class="n">tag</span>
+<span class="p">}</span>
 </code></pre></div>
 
+<p><strong>密钥特征（Key Characteristics）</strong></p>
+<ul>
+<li>Algorithm：支持RSA、EC、AES、HMAC等</li>
+<li>KeySize：密钥长度限制</li>
+<li>Digest：支持的哈希算法</li>
+<li>Padding：填充模式</li>
+<li>Purpose：加密/解密/签名/验证</li>
+<li>UserAuthenticationType：指纹/面部/PIN</li>
+</ul>
 <h3 id="_2">密钥生命周期管理</h3>
 <p><strong>密钥生成流程</strong></p>
 <ol>
@@ -362,6 +385,8 @@
 <li>通过HAL调用硬件Keymaster</li>
 <li>在TEE/安全芯片中生成密钥</li>
 <li>返回加密的key blob存储</li>
+<li>更新密钥数据库元数据</li>
+<li>触发密钥生成审计日志</li>
 </ol>
 <p><strong>密钥使用授权</strong></p>
 <ul>
@@ -369,6 +394,9 @@
 <li>时间限制：setUserAuthenticationValidityDurationSeconds()</li>
 <li>生物识别绑定：setUserAuthenticationRequired()</li>
 <li>安全锁屏绑定：setUnlockedDeviceRequired()</li>
+<li>应用绑定：setUid()限制调用者UID</li>
+<li>有效期限制：setKeyValidityStart/End()</li>
+<li>使用次数限制：setMaxUsageCount()</li>
 </ul>
 <p><strong>密钥销毁机制</strong></p>
 <ul>
@@ -376,6 +404,15 @@
 <li>应用卸载自动清理</li>
 <li>用户数据擦除</li>
 <li>硬件密钥的安全擦除保证</li>
+<li>密钥过期自动失效</li>
+<li>设备恢复出厂设置时的完全清除</li>
+</ul>
+<p><strong>密钥迁移与备份</strong></p>
+<ul>
+<li>密钥不可导出原则</li>
+<li>云备份排除：android:allowBackup="false"</li>
+<li>密钥恢复机制：通过密钥派生而非直接备份</li>
+<li>设备间迁移：使用密钥协商协议</li>
 </ul>
 <h3 id="ios-keychain">与iOS Keychain对比</h3>
 <p>| 特性 | Android Keystore | iOS Keychain |</p>
@@ -418,6 +455,21 @@
 <td>Key Attestation</td>
 <td>DeviceCheck</td>
 </tr>
+<tr>
+<td>跨应用共享</td>
+<td>通过KeyChain API</td>
+<td>Keychain Access Groups</td>
+</tr>
+<tr>
+<td>密钥迁移</td>
+<td>不支持直接迁移</td>
+<td>iCloud同步迁移</td>
+</tr>
+<tr>
+<td>默认安全级别</td>
+<td>可选软/硬件</td>
+<td>默认Secure Enclave</td>
+</tr>
 </tbody>
 </table>
 <h3 id="keystore_3">Keystore安全特性</h3>
@@ -426,18 +478,32 @@
 <li>进程级隔离：每个应用只能访问自己的密钥</li>
 <li>用户级隔离：多用户环境下密钥完全隔离</li>
 <li>密钥别名命名空间：防止密钥名称冲突</li>
+<li>工作资料隔离：个人和工作密钥分开管理</li>
+<li>SELinux上下文隔离：增强访问控制</li>
 </ul>
 <p><strong>防回滚保护</strong></p>
 <ul>
 <li>密钥版本控制</li>
 <li>单调计数器防止降级攻击</li>
 <li>与Verified Boot集成</li>
+<li>RPMB存储回滚索引</li>
+<li>密钥更新时的旧版本失效</li>
 </ul>
 <p><strong>侧信道防护</strong></p>
 <ul>
 <li>时间恒定的密码学实现</li>
 <li>功耗分析防护</li>
 <li>电磁泄露防护（硬件相关）</li>
+<li>缓存时序攻击防护</li>
+<li>内存访问模式混淆</li>
+<li>随机延迟和假操作插入</li>
+</ul>
+<p><strong>运行时安全检查</strong></p>
+<ul>
+<li>密钥使用频率限制</li>
+<li>异常操作模式检测</li>
+<li>密钥访问审计日志</li>
+<li>失败重试限制</li>
 </ul>
 <h2 id="trusty-tee">Trusty TEE架构</h2>
 <h3 id="tee">TEE基础概念</h3>
@@ -448,12 +514,24 @@
 <li>内存隔离：TZASC（TrustZone Address Space Controller）</li>
 <li>中断隔离：安全中断和非安全中断分离</li>
 <li>外设隔离：安全外设只能被安全世界访问</li>
+<li>缓存隔离：L1/L2缓存标记安全属性</li>
+<li>总线安全：AXI总线传输安全位</li>
 </ul>
 <p><strong>TEE与REE通信</strong></p>
 <ul>
 <li>SMC（Secure Monitor Call）指令触发世界切换</li>
 <li>共享内存用于数据传递</li>
 <li>RPC（Remote Procedure Call）机制</li>
+<li>世界切换开销：约数百个CPU周期</li>
+<li>异步通知机制：FIQ中断</li>
+</ul>
+<p><strong>安全监控器（Secure Monitor）</strong></p>
+<ul>
+<li>EL3特权级运行</li>
+<li>管理世界切换</li>
+<li>保存/恢复上下文</li>
+<li>处理SMC调用</li>
+<li>维护安全配置寄存器</li>
 </ul>
 <h3 id="trusty-os">Trusty OS设计</h3>
 <p>Google开发的Trusty是Android推荐的TEE操作系统：</p>
@@ -463,6 +541,8 @@
 <li>用户空间隔离：每个TA运行在独立地址空间</li>
 <li>IPC机制：基于端口的进程间通信</li>
 <li>调度器：支持多任务和优先级调度</li>
+<li>内存管理：页表隔离、堆栈保护</li>
+<li>异常处理：安全的异常捕获和处理</li>
 </ul>
 <p><strong>Trusty应用框架</strong></p>
 <ul>
@@ -470,26 +550,44 @@
 <li>存储服务：安全文件系统</li>
 <li>密码学服务：硬件加速的密码学操作</li>
 <li>IPC服务：与普通世界通信</li>
+<li>时钟服务：安全时钟和定时器</li>
+<li>随机数服务：硬件真随机数</li>
+</ul>
+<p><strong>Trusty应用开发</strong></p>
+<ul>
+<li>C/C++语言支持</li>
+<li>最小运行时库</li>
+<li>无标准库依赖</li>
+<li>静态链接二进制</li>
+<li>严格内存限制</li>
 </ul>
 <h3 id="keymaster-ta">Keymaster TA实现</h3>
 <p>Keymaster是Trusty中最重要的可信应用：</p>
 <p><strong>Keymaster TA架构</strong></p>
 <div class="codehilite"><pre><span></span><code>Keymaster TA
 ├── 密钥生成模块
-│   ├── RSA密钥生成
-│   ├── ECC密钥生成
-│   └── AES密钥生成
+│   ├── RSA密钥生成 (2048/3072/4096位)
+│   ├── ECC密钥生成 (P-256/P-384/P-521)
+│   ├── AES密钥生成 (128/256位)
+│   └── HMAC密钥生成
 ├── 密钥存储模块
 │   ├── 密钥加密/解密
 │   ├── 密钥导入/导出
-│   └── 密钥元数据管理
+│   ├── 密钥元数据管理
+│   └── 密钥版本控制
 ├── 密码学操作模块
-│   ├── 加密/解密
-│   ├── 签名/验证
-│   └── 密钥协商
-└── 认证模块
-    ├── 密钥认证生成
-    └── 使用授权验证
+│   ├── 加密/解密 (AES-GCM/CBC/CTR/ECB)
+│   ├── 签名/验证 (RSA-PSS/PKCS#1, ECDSA)
+│   ├── 密钥协商 (ECDH, DH)
+│   └── 消息认证 (HMAC-SHA256/512)
+├── 认证模块
+│   ├── 密钥认证生成
+│   ├── 使用授权验证
+│   └── 设备ID认证
+└── 安全服务
+    ├── 随机数生成 (TRNG)
+    ├── 安全时钟
+    └── 防回滚计数器
 </code></pre></div>
 
 <p><strong>安全密钥存储</strong></p>
@@ -497,6 +595,16 @@
 <li>RPMB（Replay Protected Memory Block）：防重放的安全存储</li>
 <li>密钥加密密钥（KEK）：由硬件唯一密钥派生</li>
 <li>密钥分层：主密钥→密钥加密密钥→实际密钥</li>
+<li>密钥派生函数：HKDF-SHA256</li>
+<li>加密算法：AES-256-GCM</li>
+</ul>
+<p><strong>Keymaster命令处理</strong></p>
+<ul>
+<li>命令验证和解析</li>
+<li>参数完整性检查</li>
+<li>权限验证</li>
+<li>操作执行</li>
+<li>结果加密返回</li>
 </ul>
 <h3 id="gatekeeper-ta">Gatekeeper TA</h3>
 <p>Gatekeeper负责用户凭据验证：</p>
@@ -514,13 +622,14 @@
 <li>30秒超时惩罚机制</li>
 </ul>
 <h3 id="tee_1">其他TEE方案对比</h3>
-<p>| TEE方案 | 特点 | 应用场景 |</p>
+<p>| TEE方案 | 特点 | 应用场景 | 安全特性 |</p>
 <table>
 <thead>
 <tr>
 <th>TEE方案</th>
 <th>特点</th>
 <th>应用场景</th>
+<th>安全特性</th>
 </tr>
 </thead>
 <tbody>
@@ -528,29 +637,56 @@
 <td>Trusty</td>
 <td>Google开发，开源</td>
 <td>Pixel设备</td>
+<td>微内核、完全隔离</td>
 </tr>
 <tr>
 <td>QSEE</td>
 <td>高通方案，闭源</td>
 <td>骁龙平台</td>
+<td>丰富的TA生态</td>
 </tr>
 <tr>
 <td>TrustedCore</td>
 <td>华为方案</td>
 <td>麒麟平台</td>
+<td>形式化验证</td>
 </tr>
 <tr>
 <td>Kinibi</td>
 <td>三星方案</td>
 <td>Exynos平台</td>
+<td>实时操作系统</td>
 </tr>
 <tr>
 <td>OP-TEE</td>
 <td>开源参考实现</td>
 <td>开发测试</td>
+<td>GlobalPlatform标准</td>
 </tr>
 </tbody>
 </table>
+<p><strong>各方案技术差异</strong></p>
+<p>QSEE（Qualcomm Secure Execution Environment）：</p>
+<ul>
+<li>基于L4微内核</li>
+<li>支持动态TA加载</li>
+<li>集成Crypto Engine</li>
+<li>支持DRM保护</li>
+</ul>
+<p>TrustedCore：</p>
+<ul>
+<li>华为自研微内核</li>
+<li>形式化方法验证</li>
+<li>CC EAL5+认证</li>
+<li>支持多级安全等级</li>
+</ul>
+<p>Kinibi（t-base）：</p>
+<ul>
+<li>实时操作系统设计</li>
+<li>高性能优化</li>
+<li>小内存占用</li>
+<li>快速上下文切换</li>
+</ul>
 <h2 id="_3">硬件密钥认证</h2>
 <h3 id="key-attestation">Key Attestation概述</h3>
 <p>密钥认证（Key Attestation）是Android提供的一种机制，用于验证密钥确实存储在硬件安全模块中，并且具有特定的属性。这是建立设备信任链的关键技术。</p>
@@ -569,30 +705,61 @@
 <li><strong>中间证书</strong>：设备特定的认证密钥证书</li>
 <li><strong>根证书</strong>：Google硬件认证根证书</li>
 </ol>
-<p><strong>认证扩展结构</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="nv">KeyDescription</span><span class="w"> </span><span class="o">::=</span><span class="w"> </span><span class="nv">SEQUENCE</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nv">attestationVersion</span><span class="w"> </span><span class="nv">INTEGER</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">attestationSecurityLevel</span><span class="w"> </span><span class="nv">SecurityLevel</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">keymasterVersion</span><span class="w"> </span><span class="nv">INTEGER</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">keymasterSecurityLevel</span><span class="w"> </span><span class="nv">SecurityLevel</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">attestationChallenge</span><span class="w"> </span><span class="nv">OCTET</span><span class="w"> </span><span class="nv">STRING</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">uniqueId</span><span class="w"> </span><span class="nv">OCTET</span><span class="w"> </span><span class="nv">STRING</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">softwareEnforced</span><span class="w"> </span><span class="nv">AuthorizationList</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">teeEnforced</span><span class="w"> </span><span class="nv">AuthorizationList</span><span class="p">,</span>
-<span class="p">}</span>
+<p><strong>证书验证路径</strong></p>
+<div class="codehilite"><pre><span></span><code>用户密钥证书 ← 设备中间证书 ← Google根证书
+    ↓                ↓                ↓
+ 签名验证         签名验证       信任锚
+</code></pre></div>
 
-<span class="nv">AuthorizationList</span><span class="w"> </span><span class="o">::=</span><span class="w"> </span><span class="nv">SEQUENCE</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nv">purpose</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">SET</span><span class="w"> </span><span class="nv">OF</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">algorithm</span><span class="w"> </span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">keySize</span><span class="w"> </span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">digest</span><span class="w"> </span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">SET</span><span class="w"> </span><span class="nv">OF</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">padding</span><span class="w"> </span><span class="p">[</span><span class="mi">6</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">SET</span><span class="w"> </span><span class="nv">OF</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">ecCurve</span><span class="w"> </span><span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">rsaPublicExponent</span><span class="w"> </span><span class="p">[</span><span class="mi">200</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">INTEGER</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">rollbackResistance</span><span class="w"> </span><span class="p">[</span><span class="mi">303</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">NULL</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="nv">rootOfTrust</span><span class="w"> </span><span class="p">[</span><span class="mi">704</span><span class="p">]</span><span class="w"> </span><span class="nv">EXPLICIT</span><span class="w"> </span><span class="nv">RootOfTrust</span><span class="w"> </span><span class="nv">OPTIONAL</span><span class="p">,</span>
-<span class="w">    </span><span class="o">...</span>
-<span class="p">}</span>
+<p><strong>认证扩展结构</strong></p>
+<div class="codehilite"><pre><span></span><code>KeyDescription<span class="w"> </span>::=<span class="w"> </span>SEQUENCE<span class="w"> </span>{
+<span class="w">    </span>attestationVersion<span class="w"> </span>INTEGER,
+<span class="w">    </span>attestationSecurityLevel<span class="w"> </span>SecurityLevel,
+<span class="w">    </span>keymasterVersion<span class="w"> </span>INTEGER,
+<span class="w">    </span>keymasterSecurityLevel<span class="w"> </span>SecurityLevel,
+<span class="w">    </span>attestationChallenge<span class="w"> </span>OCTET<span class="w"> </span>STRING,
+<span class="w">    </span>uniqueId<span class="w"> </span>OCTET<span class="w"> </span>STRING,
+<span class="w">    </span>softwareEnforced<span class="w"> </span>AuthorizationList,
+<span class="w">    </span>teeEnforced<span class="w"> </span>AuthorizationList,
+}
+
+SecurityLevel<span class="w"> </span>::=<span class="w"> </span>ENUMERATED<span class="w"> </span>{
+<span class="w">    </span>Software(<span class="m">0</span>),
+<span class="w">    </span>TrustedEnvironment(<span class="m">1</span>),
+<span class="w">    </span>StrongBox(<span class="m">2</span>),
+}
+
+AuthorizationList<span class="w"> </span>::=<span class="w"> </span>SEQUENCE<span class="w"> </span>{
+<span class="w">    </span>purpose<span class="w"> </span>[<span class="m">1</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>SET<span class="w"> </span>OF<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>algorithm<span class="w"> </span>[<span class="m">2</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>keySize<span class="w"> </span>[<span class="m">3</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>digest<span class="w"> </span>[<span class="m">5</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>SET<span class="w"> </span>OF<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>padding<span class="w"> </span>[<span class="m">6</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>SET<span class="w"> </span>OF<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>ecCurve<span class="w"> </span>[<span class="m">10</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>rsaPublicExponent<span class="w"> </span>[<span class="m">200</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>rollbackResistance<span class="w"> </span>[<span class="m">303</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>NULL<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>activeDateTime<span class="w"> </span>[<span class="m">400</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>originationExpireDateTime<span class="w"> </span>[<span class="m">401</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>usageExpireDateTime<span class="w"> </span>[<span class="m">402</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>userAuthType<span class="w"> </span>[<span class="m">504</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>authTimeout<span class="w"> </span>[<span class="m">505</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>allowWhileOnBody<span class="w"> </span>[<span class="m">506</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>NULL<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>trustedUserPresenceRequired<span class="w"> </span>[<span class="m">507</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>NULL<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>trustedConfirmationRequired<span class="w"> </span>[<span class="m">508</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>NULL<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>unlockedDeviceRequired<span class="w"> </span>[<span class="m">509</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>NULL<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>creationDateTime<span class="w"> </span>[<span class="m">701</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>origin<span class="w"> </span>[<span class="m">702</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>rootOfTrust<span class="w"> </span>[<span class="m">704</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>RootOfTrust<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>osVersion<span class="w"> </span>[<span class="m">705</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>osPatchLevel<span class="w"> </span>[<span class="m">706</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>attestationApplicationId<span class="w"> </span>[<span class="m">709</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>OCTET<span class="w"> </span>STRING<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>attestationIdBrand<span class="w"> </span>[<span class="m">710</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>OCTET<span class="w"> </span>STRING<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>attestationIdDevice<span class="w"> </span>[<span class="m">711</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>OCTET<span class="w"> </span>STRING<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>attestationIdProduct<span class="w"> </span>[<span class="m">712</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>OCTET<span class="w"> </span>STRING<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>vendorPatchLevel<span class="w"> </span>[<span class="m">718</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>bootPatchLevel<span class="w"> </span>[<span class="m">719</span>]<span class="w"> </span>EXPLICIT<span class="w"> </span>INTEGER<span class="w"> </span>OPTIONAL,
+<span class="w">    </span>...
+}
 </code></pre></div>
 
 <h3 id="_5">认证流程实现</h3>
@@ -610,13 +777,33 @@
 <li>解析认证扩展</li>
 <li>验证挑战值匹配</li>
 <li>检查设备安全属性</li>
+<li>验证时间戳新鲜度</li>
+<li>检查密钥使用限制</li>
 </ol>
 <p><strong>关键API调用</strong></p>
 <ul>
 <li>setAttestationChallenge()：设置挑战值</li>
 <li>generateKeyPair()：生成密钥对并认证</li>
 <li>getCertificateChain()：获取认证证书链</li>
+<li>setIsStrongBoxBacked()：指定使用StrongBox</li>
+<li>setDevicePropertiesAttestationIncluded()：包含设备属性</li>
 </ul>
+<p><strong>认证结果解析</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 解析认证扩展</span>
+<span class="n">AttestationExtension</span><span class="w"> </span><span class="n">ext</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">parseAttestationExtension</span><span class="p">(</span><span class="n">cert</span><span class="p">);</span>
+
+<span class="c1">// 验证安全级别</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ext</span><span class="p">.</span><span class="na">attestationSecurityLevel</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">SecurityLevel</span><span class="p">.</span><span class="na">StrongBox</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 最高安全级别</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ext</span><span class="p">.</span><span class="na">attestationSecurityLevel</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">SecurityLevel</span><span class="p">.</span><span class="na">TrustedEnvironment</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// TEE级别安全</span>
+<span class="p">}</span>
+
+<span class="c1">// 检查硬件强制属性</span>
+<span class="n">AuthorizationList</span><span class="w"> </span><span class="n">hwEnforced</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ext</span><span class="p">.</span><span class="na">teeEnforced</span><span class="p">;</span>
+<span class="n">verifyHardwareEnforcedProperties</span><span class="p">(</span><span class="n">hwEnforced</span><span class="p">);</span>
+</code></pre></div>
+
 <h3 id="root-of-trust">Root of Trust验证</h3>
 <p>Root of Trust包含设备启动状态信息：</p>
 <p><strong>RootOfTrust结构</strong></p>
@@ -642,6 +829,33 @@
 <li>Unverified：未启用verified boot</li>
 <li>Failed：系统完整性验证失败</li>
 </ul>
+<p><strong>验证实践</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 服务端验证逻辑</span>
+<span class="nx">RootOfTrust</span><span class="w"> </span><span class="nx">rot</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">attestation</span><span class="p">.</span><span class="nx">getRootOfTrust</span><span class="p">();</span>
+
+<span class="c1">// 检查设备锁定状态</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(!</span><span class="nx">rot</span><span class="p">.</span><span class="nx">deviceLocked</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 设备已解锁，降低信任度</span>
+<span class="p">}</span>
+
+<span class="c1">// 检查启动状态</span>
+<span class="nx">switch</span><span class="w"> </span><span class="p">(</span><span class="nx">rot</span><span class="p">.</span><span class="nx">verifiedBootState</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="nx">Verified</span><span class="p">:</span>
+<span class="w">        </span><span class="c1">// 完全可信</span>
+<span class="w">        </span><span class="k">break</span><span class="p">;</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="nx">SelfSigned</span><span class="p">:</span>
+<span class="w">        </span><span class="c1">// 开发者设备，需要额外验证</span>
+<span class="w">        </span><span class="k">break</span><span class="p">;</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="nx">Unverified</span><span class="p">:</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="nx">Failed</span><span class="p">:</span>
+<span class="w">        </span><span class="c1">// 不可信，拒绝服务</span>
+<span class="w">        </span><span class="k">break</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// 验证启动密钥哈希</span>
+<span class="nx">verifyBootKeyHash</span><span class="p">(</span><span class="nx">rot</span><span class="p">.</span><span class="nx">verifiedBootKey</span><span class="p">);</span>
+</code></pre></div>
+
 <h3 id="safetynetplay-integrity-api">SafetyNet/Play Integrity API</h3>
 <p>除了Key Attestation，Android还提供应用级的设备认证：</p>
 <p><strong>SafetyNet Attestation（已弃用）</strong></p>
@@ -657,6 +871,8 @@
 <li>应用完整性验证</li>
 <li>账号真实性检查</li>
 <li>设备活动风险评估</li>
+<li>实时环境检测</li>
+<li>反作弊机制</li>
 </ul>
 <p><strong>集成要点</strong></p>
 <div class="codehilite"><pre><span></span><code>判定标准层次：
@@ -665,8 +881,52 @@
 2. 基本完整性：可能已root但未主动攻击
 3. 应用完整性：APK未被篡改
 4. 账号可信度：非机器人账号
+5. 环境安全性：无屏幕录制、辅助服务
 </code></pre></div>
 
+<p><strong>API差异对比</strong>
+| 特性 | SafetyNet | Play Integrity |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>SafetyNet</th>
+<th>Play Integrity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>发布时间</td>
+<td>2013</td>
+<td>2021</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已弃用</td>
+<td>推荐使用</td>
+</tr>
+<tr>
+<td>检测范围</td>
+<td>设备状态</td>
+<td>设备+应用+环境</td>
+</tr>
+<tr>
+<td>防篡改</td>
+<td>中等</td>
+<td>强</td>
+</tr>
+<tr>
+<td>性能影响</td>
+<td>较大</td>
+<td>优化</td>
+</tr>
+<tr>
+<td>API限制</td>
+<td>无</td>
+<td>有配额限制</td>
+</tr>
+</tbody>
+</table>
 <h3 id="strongbox-keymaster">StrongBox Keymaster</h3>
 <p>Android 9引入StrongBox，提供更高安全级别：</p>
 <p><strong>StrongBox要求</strong></p>
@@ -675,6 +935,8 @@
 <li>独立的CPU、内存、存储</li>
 <li>真随机数生成器</li>
 <li>侧信道攻击防护</li>
+<li>物理攻击检测</li>
+<li>安全元件认证（CC EAL4+）</li>
 </ul>
 <p><strong>与TEE Keymaster对比</strong>
 | 特性 | TEE Keymaster | StrongBox |</p>
@@ -712,8 +974,27 @@
 <td>完整</td>
 <td>有限</td>
 </tr>
+<tr>
+<td>典型实现</td>
+<td>ARM TrustZone</td>
+<td>Titan M/SE</td>
+</tr>
 </tbody>
 </table>
+<p><strong>StrongBox限制</strong></p>
+<ul>
+<li>RSA：仅2048位</li>
+<li>ECC：仅P-256曲线  </li>
+<li>AES：128/256位</li>
+<li>性能：签名操作约50ms</li>
+<li>存储：有限的密钥数量</li>
+</ul>
+<p><strong>使用场景建议</strong></p>
+<ul>
+<li>高价值密钥：使用StrongBox</li>
+<li>频繁操作：使用TEE Keymaster</li>
+<li>混合模式：根密钥在StrongBox，工作密钥在TEE</li>
+</ul>
 <h3 id="ios">与iOS对比</h3>
 <p><strong>iOS设备认证机制</strong></p>
 <ul>

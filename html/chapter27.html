@@ -312,6 +312,40 @@
 <li>修改<code>sched_min_granularity_ns</code>提高交互响应</li>
 <li>引入<code>schedtune</code>机制进行能效调优</li>
 </ul>
+<p><strong>CFS内部实现细节</strong>：</p>
+<p>CFS使用<code>struct sched_entity</code>表示可调度实体，通过<code>struct cfs_rq</code>管理运行队列：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">sched_entity</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">load_weight</span><span class="w"> </span><span class="n">load</span><span class="p">;</span><span class="w">       </span><span class="c1">// 权重信息</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">rb_node</span><span class="w"> </span><span class="n">run_node</span><span class="p">;</span><span class="w">       </span><span class="c1">// 红黑树节点</span>
+<span class="w">    </span><span class="n">u64</span><span class="w"> </span><span class="n">exec_start</span><span class="p">;</span><span class="w">               </span><span class="c1">// 执行开始时间</span>
+<span class="w">    </span><span class="n">u64</span><span class="w"> </span><span class="n">sum_exec_runtime</span><span class="p">;</span><span class="w">         </span><span class="c1">// 累计执行时间</span>
+<span class="w">    </span><span class="n">u64</span><span class="w"> </span><span class="n">vruntime</span><span class="p">;</span><span class="w">                 </span><span class="c1">// 虚拟运行时间</span>
+<span class="w">    </span><span class="n">u64</span><span class="w"> </span><span class="n">prev_sum_exec_runtime</span><span class="p">;</span><span class="w">    </span><span class="c1">// 上次更新时的累计时间</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><strong>权重计算机制</strong>：</p>
+<p>Linux内核定义了40个权重等级，nice值每差1，CPU时间相差约10%。权重数组<code>prio_to_weight[]</code>预计算了从nice -20到19的权重值：</p>
+<div class="codehilite"><pre><span></span><code>nice -20: weight = 88761
+nice   0: weight = 1024 (NICE_0_LOAD)
+nice  19: weight = 15
+</code></pre></div>
+
+<p>这种指数级的权重差异确保了高优先级进程能获得显著更多的CPU时间。</p>
+<p><strong>与iOS调度器对比</strong>：</p>
+<ul>
+<li>iOS使用Mach微内核的调度器，基于优先级带(priority bands)</li>
+<li>iOS的QoS (Quality of Service)类别：User-interactive、User-initiated、Utility、Background</li>
+<li>Android的nice值更细粒度，iOS的QoS更面向应用场景</li>
+<li>iOS对后台任务限制更严格，调度策略更激进</li>
+</ul>
+<p><strong>与鸿蒙调度器对比</strong>：</p>
+<ul>
+<li>鸿蒙采用确定性调度算法，支持分布式软总线场景</li>
+<li>引入任务调度图(Task Scheduling Graph)概念</li>
+<li>支持跨设备的协同调度，考虑网络延迟</li>
+<li>实时性保证扩展到分布式场景</li>
+</ul>
 <h4 id="rt">RT调度类实现</h4>
 <p>RT调度类为实时任务提供确定性调度保证，Android中主要用于：</p>
 <ul>
@@ -327,6 +361,52 @@
 <li><strong>抢占规则</strong>：高优先级任务总是抢占低优先级</li>
 <li><strong>CPU带宽限制</strong>：通过<code>sched_rt_runtime_us</code>和<code>sched_rt_period_us</code>防止RT任务独占CPU</li>
 </ul>
+<p><strong>RT调度实现原理</strong>：</p>
+<p>RT调度类使用优先级数组管理可运行任务：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">rt_prio_array</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">DECLARE_BITMAP</span><span class="p">(</span><span class="n">bitmap</span><span class="p">,</span><span class="w"> </span><span class="n">MAX_RT_PRIO</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span><span class="w">  </span><span class="c1">// 优先级位图</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">list_head</span><span class="w"> </span><span class="n">queue</span><span class="p">[</span><span class="n">MAX_RT_PRIO</span><span class="p">];</span><span class="w">    </span><span class="c1">// 每个优先级的任务队列</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><strong>SCHED_FIFO vs SCHED_RR</strong>：</p>
+<ul>
+<li>SCHED_FIFO：先进先出，同优先级任务不会相互抢占，一直运行直到阻塞或主动让出</li>
+<li>SCHED_RR：轮转调度，同优先级任务按时间片(默认100ms)轮转</li>
+</ul>
+<p><strong>RT带宽控制机制</strong>：</p>
+<p>Linux 2.6.25引入RT带宽控制，防止RT任务饿死其他任务：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 默认配置：每1秒内RT任务最多运行0.95秒</span>
+/proc/sys/kernel/sched_rt_period_us<span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">1000000</span><span class="w">  </span><span class="c1"># 1秒</span>
+/proc/sys/kernel/sched_rt_runtime_us<span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">950000</span><span class="w">  </span><span class="c1"># 0.95秒</span>
+</code></pre></div>
+
+<p>超过配额后，RT任务会被限流(throttled)，直到下个周期。这保证了系统始终有5%的时间处理非RT任务。</p>
+<p><strong>Android RT优先级分配策略</strong>：</p>
+<div class="codehilite"><pre><span></span><code>音频相关：
+
+- AudioFlinger::MixerThread: 96-98
+- FastMixer: 98
+- AudioTrack回调: 95
+
+图形相关：
+
+- SurfaceFlinger主线程: 1-2 (使用nice值)
+- RenderThread: 不使用RT，使用nice -10到-4
+- HWC回调线程: 90
+
+输入相关：
+
+- InputReader: 91
+- InputDispatcher: 92
+</code></pre></div>
+
+<p><strong>与iOS实时性保证对比</strong>：</p>
+<ul>
+<li>iOS没有显式的RT调度类，通过QoS和优先级反转避免机制保证实时性</li>
+<li>iOS的实时音频使用专门的Audio Workgroup API</li>
+<li>Android的RT调度更显式可控，iOS更依赖系统自动管理</li>
+</ul>
 <h4 id="eas-energy-aware-scheduling">EAS (Energy Aware Scheduling) 集成</h4>
 <p>Android 5.0开始集成EAS，实现性能与功耗的平衡：</p>
 <ul>
@@ -340,6 +420,59 @@
 <li><code>find_energy_efficient_cpu()</code>: EAS核心决策函数</li>
 <li><code>compute_energy()</code>: 计算任务在特定CPU上的能耗</li>
 <li><code>schedutil_cpu_freq()</code>: 频率调节接口</li>
+</ul>
+<p><strong>PELT算法详解</strong>：</p>
+<p>PELT (Per-Entity Load Tracking)是EAS的核心，追踪每个任务的历史负载：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 负载衰减公式：每1024us衰减一次</span>
+<span class="n">load</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">load</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">new_load</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">y</span><span class="p">)</span>
+<span class="c1">// 其中 y = 0.978 (衰减因子)</span>
+</code></pre></div>
+
+<p>PELT追踪三个关键指标：</p>
+<ul>
+<li><code>load_avg</code>：平均负载，用于负载均衡</li>
+<li><code>util_avg</code>：平均利用率，用于频率调节</li>
+<li><code>runnable_avg</code>：可运行时间比例</li>
+</ul>
+<p><strong>能效模型定义</strong>：</p>
+<p>设备树中定义每个CPU的能效数据：</p>
+<div class="codehilite"><pre><span></span><code><span class="nf">cpu-cost</span><span class="cm"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nf">cluster0</span><span class="cm"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">busy-cost-data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&lt;</span>
+<span class="w">            </span><span class="cm">/* freq    power */</span>
+<span class="w">            </span><span class="mi">300000</span><span class="w">    </span><span class="mi">5</span>
+<span class="w">            </span><span class="mi">600000</span><span class="w">    </span><span class="mi">9</span>
+<span class="w">            </span><span class="mi">900000</span><span class="w">    </span><span class="mi">16</span>
+<span class="w">            </span><span class="mi">1200000</span><span class="w">   </span><span class="mi">27</span>
+<span class="w">        </span><span class="o">&gt;</span><span class="p">;</span>
+<span class="w">        </span><span class="n">idle-cost-data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&lt;</span>
+<span class="w">            </span><span class="cm">/* state   power */</span>
+<span class="w">            </span><span class="mi">0</span><span class="w">          </span><span class="mi">0</span><span class="w">    </span><span class="cm">/* WFI */</span>
+<span class="w">            </span><span class="mi">1</span><span class="w">          </span><span class="mi">0</span><span class="w">    </span><span class="cm">/* retention */</span>
+<span class="w">            </span><span class="mi">2</span><span class="w">          </span><span class="mi">0</span><span class="w">    </span><span class="cm">/* power collapse */</span>
+<span class="w">        </span><span class="o">&gt;</span><span class="p">;</span>
+<span class="w">    </span><span class="p">};</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><strong>EAS决策过程</strong>：</p>
+<ol>
+<li>计算任务在每个CPU上的预期能耗</li>
+<li>考虑任务迁移成本（cache miss等）</li>
+<li>选择能耗最低的CPU</li>
+<li>触发频率调整</li>
+</ol>
+<p><strong>Android特有的EAS扩展</strong>：</p>
+<ul>
+<li><strong>Prefer Idle</strong>：优先选择空闲CPU，减少干扰</li>
+<li><strong>SchedTune</strong>：per-cgroup的性能/能效偏好</li>
+<li><strong>WALT (Window Assisted Load Tracking)</strong>：某些厂商使用的替代方案</li>
+</ul>
+<p><strong>与其他系统能效调度对比</strong>：</p>
+<ul>
+<li>iOS：使用E-core和P-core的非对称架构，通过QoS自动分配</li>
+<li>鸿蒙：引入AI预测的能效调度，基于应用行为模式</li>
+<li>Windows on ARM：使用类似的大小核架构，但调度策略更保守</li>
 </ul>
 <h4 id="linux">与Linux主线调度器差异</h4>
 <p>Android调度器的主要差异：</p>

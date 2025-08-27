@@ -303,114 +303,446 @@
 </ol>
 <p>OriginOS对Android Framework进行了深度重构，主要修改集中在：</p>
 <ul>
-<li>WindowManagerService：实现华容网格布局系统</li>
-<li>ActivityManagerService：支持原子组件的生命周期管理</li>
-<li>PackageManagerService：增强的应用管理和权限控制</li>
-<li>SystemUI：完全重写的系统界面组件</li>
+<li><strong>WindowManagerService (WMS) 改造</strong>：</li>
+<li>实现华容网格布局系统的窗口管理器扩展</li>
+<li>新增 GridLayoutController 负责网格对齐和动态调整</li>
+<li>修改 DisplayContent 支持多种布局模式切换</li>
+<li>扩展 WindowState 增加网格位置属性</li>
+<li>
+<p>优化窗口动画系统支持网格间转场效果</p>
+</li>
+<li>
+<p><strong>ActivityManagerService (AMS) 增强</strong>：</p>
+</li>
+<li>实现 AtomicComponentController 管理原子组件生命周期</li>
+<li>修改 ProcessRecord 支持组件进程优先级调度</li>
+<li>新增 ComponentStateManager 处理组件状态转换</li>
+<li>扩展 ActivityStack 支持原子组件的栈管理</li>
+<li>
+<p>优化内存管理策略以适应组件化架构</p>
+</li>
+<li>
+<p><strong>PackageManagerService (PMS) 扩展</strong>：</p>
+</li>
+<li>增加原子组件的安装和管理逻辑</li>
+<li>实现 ComponentPackageParser 解析组件包</li>
+<li>扩展权限模型支持组件细粒度权限</li>
+<li>优化包扫描流程提升启动速度</li>
+<li>
+<p>新增组件版本管理和热更新机制</p>
+</li>
+<li>
+<p><strong>SystemUI 完全重写</strong>：</p>
+</li>
+<li>基于MVVM架构重构状态栏和导航栏</li>
+<li>实现可定制的快捷控制中心</li>
+<li>新增手势导航的物理引擎</li>
+<li>集成Jovi AI的智能建议卡片</li>
+<li>支持主题引擎的深度定制</li>
 </ul>
 <ol start="2">
 <li><strong>渲染管线优化</strong></li>
 </ol>
 <p>OriginOS引入了全新的渲染管线，通过修改SurfaceFlinger和hwcomposer HAL：</p>
 <ul>
-<li>实现了120Hz高刷新率的系统级支持</li>
-<li>优化了多层合成算法，减少GPU负载</li>
-<li>引入了智能刷新率调节机制</li>
-<li>支持可变刷新率（VRR）技术</li>
+<li><strong>高刷新率支持</strong>：</li>
+<li>修改 SurfaceFlinger 的 VSync 调度机制</li>
+<li>实现 RefreshRateSelector 动态选择最优刷新率</li>
+<li>扩展 DisplayDevice 支持 90Hz/120Hz/144Hz</li>
+<li>优化 BufferQueue 减少帧延迟</li>
+<li>
+<p>新增 AdaptiveSync 技术减少撕裂</p>
+</li>
+<li>
+<p><strong>合成算法优化</strong>：</p>
+</li>
+<li>实现智能层分配算法 SmartLayerAssignment</li>
+<li>优化 HWC2 的合成策略决策</li>
+<li>减少 GPU 合成的层数，提升效率</li>
+<li>支持部分更新 (Partial Update) 降低功耗</li>
+<li>
+<p>实现脏区域追踪 (Dirty Region Tracking)</p>
+</li>
+<li>
+<p><strong>智能刷新率调节</strong>：</p>
+</li>
+<li>基于内容感知的刷新率切换</li>
+<li>游戏场景自动提升到最高刷新率</li>
+<li>静态内容自动降低刷新率省电</li>
+<li>滚动时的刷新率预测优化</li>
+<li>
+<p>与触控采样率的协同调节</p>
+</li>
+<li>
+<p><strong>可变刷新率 (VRR) 实现</strong>：</p>
+</li>
+<li>支持 HDMI 2.1 VRR 标准</li>
+<li>实现 FreeSync/G-Sync 兼容</li>
+<li>动态范围 48Hz-144Hz 无缝切换</li>
+<li>消除画面撕裂和卡顿</li>
+<li>优化游戏体验的帧同步</li>
 </ul>
 <h3 id="_1">华容网格设计体系</h3>
-<p>华容网格是OriginOS的核心设计语言，其技术实现涉及：</p>
+<p>华容网格是OriginOS的核心设计语言，其技术实现涉及多个系统层级的深度改造：</p>
 <ol>
 <li><strong>布局引擎改造</strong></li>
 </ol>
-<p>通过修改ViewGroup和LayoutInflater：</p>
+<p>通过修改ViewGroup和LayoutInflater实现全新的布局系统：</p>
 <ul>
-<li>实现了灵活的网格对齐系统</li>
-<li>支持组件的自适应缩放</li>
-<li>提供了流畅的过渡动画</li>
+<li><strong>网格计算引擎</strong>：</li>
+<li>实现 GridCalculator 类处理网格数学运算</li>
+<li>支持 1x1 到 4x4 的灵活网格布局</li>
+<li>动态网格密度调整（根据屏幕尺寸）</li>
+<li>网格吸附算法（GridSnapAlgorithm）</li>
+<li>
+<p>子像素级对齐精度</p>
+</li>
+<li>
+<p><strong>自适应缩放系统</strong>：</p>
+</li>
+<li>基于内容的智能缩放（ContentAwareScaling）</li>
+<li>保持宽高比的约束缩放</li>
+<li>多断点响应式布局</li>
+<li>文字大小的动态调整</li>
+<li>
+<p>图标密度的自适应</p>
+</li>
+<li>
+<p><strong>过渡动画框架</strong>：</p>
+</li>
+<li>基于贝塞尔曲线的缓动函数</li>
+<li>支持弹性动画（Spring Animation）</li>
+<li>网格变换的形变动画</li>
+<li>并行动画编排系统</li>
+<li>60fps 的流畅度保证</li>
 </ul>
 <ol start="2">
 <li><strong>组件适配框架</strong></li>
 </ol>
-<p>OriginOS提供了一套完整的适配框架：</p>
+<p>OriginOS提供了一套完整的适配框架，确保第三方应用的兼容性：</p>
 <ul>
-<li>自动布局适配API</li>
-<li>响应式设计支持</li>
-<li>多屏幕尺寸优化</li>
+<li><strong>自动布局适配API</strong>：</li>
+<li>GridLayoutAdapter 自动转换传统布局</li>
+<li>ConstraintResolver 解决布局冲突</li>
+<li>向后兼容的 LayoutParams 扩展</li>
+<li>智能布局建议系统</li>
+<li>
+<p>实时预览和调试工具</p>
+</li>
+<li>
+<p><strong>响应式设计支持</strong>：</p>
+</li>
+<li>断点系统（Breakpoint System）</li>
+<li>流式布局（Fluid Layout）引擎</li>
+<li>弹性盒模型（Flexbox）集成</li>
+<li>网格模板（Grid Template）定义</li>
+<li>
+<p>媒体查询（Media Query）支持</p>
+</li>
+<li>
+<p><strong>多屏幕尺寸优化</strong>：</p>
+</li>
+<li>密度无关像素（DP）增强</li>
+<li>矢量图形自动缩放</li>
+<li>字体缩放独立控制</li>
+<li>触控目标自适应</li>
+<li>折叠屏特殊适配</li>
 </ul>
 <h3 id="_2">视觉交互革新</h3>
 <ol>
 <li><strong>交互引擎升级</strong></li>
 </ol>
-<p>OriginOS重写了触控事件处理机制：</p>
+<p>OriginOS重写了触控事件处理机制，实现更自然的交互体验：</p>
 <ul>
-<li>优化了InputDispatcher的事件分发</li>
-<li>实现了预测性触控响应</li>
-<li>支持复杂的手势识别</li>
+<li><strong>事件分发优化</strong>：</li>
+<li>重构 InputDispatcher 降低延迟</li>
+<li>实现并行事件处理管线</li>
+<li>优先级队列管理触控事件</li>
+<li>批量事件合并优化</li>
+<li>
+<p>硬件时间戳精确同步</p>
+</li>
+<li>
+<p><strong>预测性触控响应</strong>：</p>
+</li>
+<li>基于卡尔曼滤波的轨迹预测</li>
+<li>机器学习模型预测用户意图</li>
+<li>提前渲染减少感知延迟</li>
+<li>触控压力和面积分析</li>
+<li>
+<p>多指触控的协同预测</p>
+</li>
+<li>
+<p><strong>手势识别增强</strong>：</p>
+</li>
+<li>深度学习手势分类器</li>
+<li>自定义手势训练框架</li>
+<li>上下文感知手势解释</li>
+<li>手势冲突解决机制</li>
+<li>连续手势的状态机</li>
 </ul>
 <ol start="2">
 <li><strong>动效系统重构</strong></li>
 </ol>
-<p>通过改造Animation Framework：</p>
+<p>通过改造Animation Framework实现更自然的动画效果：</p>
 <ul>
-<li>实现了基于物理的动画引擎</li>
-<li>支持可中断的过渡动画</li>
-<li>优化了动画的功耗表现</li>
+<li><strong>物理动画引擎</strong>：</li>
+<li>基于牛顿力学的动画模拟</li>
+<li>弹簧-阻尼系统（Spring-Damper）</li>
+<li>惯性滚动物理模型</li>
+<li>碰撞检测和响应</li>
+<li>
+<p>重力和摩擦力模拟</p>
+</li>
+<li>
+<p><strong>可中断动画系统</strong>：</p>
+</li>
+<li>动画状态快照机制</li>
+<li>平滑过渡到新目标</li>
+<li>动画优先级管理</li>
+<li>资源回收和复用</li>
+<li>
+<p>动画性能监控</p>
+</li>
+<li>
+<p><strong>功耗优化策略</strong>：</p>
+</li>
+<li>动画帧率动态调整</li>
+<li>GPU 渲染路径优化</li>
+<li>不可见动画自动暂停</li>
+<li>批量动画合并执行</li>
+<li>低功耗模式适配</li>
 </ul>
 <h3 id="_3">与其他定制系统的差异化</h3>
 <p>相比MIUI、ColorOS等系统，OriginOS的独特之处在于：</p>
 <ol>
-<li>
-<p><strong>架构层面</strong>
-- 更激进的Framework修改策略
-- 独立的组件运行时环境
-- 深度的AI集成架构</p>
-</li>
-<li>
-<p><strong>性能优化</strong>
-- 更底层的内核优化
-- 独特的内存管理策略
-- 创新的存储优化技术</p>
-</li>
-<li>
-<p><strong>生态整合</strong>
-- 与vivo IoT设备的深度集成
-- 跨设备协同能力
-- 云端服务的无缝对接</p>
-</li>
+<li><strong>架构层面</strong></li>
 </ol>
+<ul>
+<li><strong>Framework修改深度</strong>：</li>
+<li>OriginOS：70%+ Framework 代码修改</li>
+<li>MIUI：40-50% Framework 修改</li>
+<li>ColorOS：30-40% Framework 修改</li>
+<li>
+<p>更激进的重构带来更大的创新空间</p>
+</li>
+<li>
+<p><strong>组件化架构</strong>：</p>
+</li>
+<li>独立进程的原子组件系统</li>
+<li>微服务化的系统服务</li>
+<li>插件化的功能模块</li>
+<li>热更新能力支持</li>
+<li>
+<p>沙箱化的安全隔离</p>
+</li>
+<li>
+<p><strong>AI原生集成</strong>：</p>
+</li>
+<li>AI调度器直接集成在内核</li>
+<li>系统级的AI资源管理</li>
+<li>端到端的AI优化管线</li>
+<li>分布式AI计算框架</li>
+<li>隐私保护的联邦学习</li>
+</ul>
+<ol start="2">
+<li><strong>性能优化</strong></li>
+</ol>
+<ul>
+<li><strong>内核级优化</strong>：</li>
+<li>自研调度算法 VivoScheduler</li>
+<li>内存管理子系统重写</li>
+<li>IO调度器深度定制</li>
+<li>中断处理优化</li>
+<li>
+<p>电源管理增强</p>
+</li>
+<li>
+<p><strong>内存管理创新</strong>：</p>
+</li>
+<li>业界最大的内存扩展能力（+8GB）</li>
+<li>智能内存压缩算法</li>
+<li>跨进程内存共享优化</li>
+<li>内存碎片实时整理</li>
+<li>
+<p>应用内存画像分析</p>
+</li>
+<li>
+<p><strong>存储优化技术</strong>：</p>
+</li>
+<li>F2FS 文件系统定制</li>
+<li>智能垃圾回收（GC）</li>
+<li>热数据识别和缓存</li>
+<li>存储寿命预测</li>
+<li>数据迁移优化</li>
+</ul>
+<ol start="3">
+<li><strong>生态整合</strong></li>
+</ol>
+<ul>
+<li><strong>IoT设备集成</strong>：</li>
+<li>统一的设备发现协议</li>
+<li>跨设备UI同步</li>
+<li>分布式计算框架</li>
+<li>无缝切换体验</li>
+<li>
+<p>统一账号体系</p>
+</li>
+<li>
+<p><strong>跨设备协同</strong>：</p>
+</li>
+<li>多屏协同（手机、平板、PC）</li>
+<li>应用接力（跨设备续接）</li>
+<li>剪贴板同步</li>
+<li>文件快传</li>
+<li>
+<p>远程控制</p>
+</li>
+<li>
+<p><strong>云服务整合</strong>：</p>
+</li>
+<li>原子化云服务架构</li>
+<li>端云协同计算</li>
+<li>智能数据同步</li>
+<li>隐私安全保护</li>
+<li>离线优先策略</li>
+</ul>
 <h2 id="_4">原子组件系统实现</h2>
 <h3 id="_5">原子组件架构设计</h3>
 <p>OriginOS的原子组件（Atomic Components）是一种革命性的桌面组件系统，其架构设计突破了传统Android Widget的限制：</p>
 <ol>
 <li><strong>组件运行时架构</strong></li>
 </ol>
-<p>原子组件采用了独立的运行时环境：</p>
+<p>原子组件采用了独立的运行时环境，实现了高性能和高安全性的统一：</p>
 <ul>
-<li>基于独立进程的组件容器（AtomicContainer）</li>
-<li>自定义的组件生命周期管理器（AtomicLifecycleManager）</li>
-<li>专用的渲染线程池（AtomicRenderPool）</li>
-<li>轻量级的组件间通信机制（AtomicIPC）</li>
+<li><strong>组件容器系统（AtomicContainer）</strong>：</li>
+<li>每个组件运行在独立的容器进程中</li>
+<li>容器基于 Zygote 分叉，预加载组件运行时</li>
+<li>实现了轻量级的进程池管理</li>
+<li>支持容器的快速启动和休眠</li>
+<li>
+<p>内存和CPU资源的精确控制</p>
+</li>
+<li>
+<p><strong>生命周期管理器（AtomicLifecycleManager）</strong>：</p>
+</li>
+<li>细粒度的状态机管理（7个状态）</li>
+<li>状态转换的事务性保证</li>
+<li>异步生命周期回调机制</li>
+<li>组件依赖关系追踪</li>
+<li>
+<p>崩溃恢复和自动重启</p>
+</li>
+<li>
+<p><strong>渲染线程池（AtomicRenderPool）</strong>：</p>
+</li>
+<li>专用的 UI 线程和渲染线程分离</li>
+<li>支持并行渲染多个组件</li>
+<li>渲染任务的优先级调度</li>
+<li>帧缓冲的智能管理</li>
+<li>
+<p>与 SurfaceFlinger 的直接通信</p>
+</li>
+<li>
+<p><strong>组件间通信（AtomicIPC）</strong>：</p>
+</li>
+<li>基于共享内存的高速通信</li>
+<li>支持同步和异步消息</li>
+<li>事件总线机制</li>
+<li>数据流管道（Data Pipeline）</li>
+<li>零拷贝的大数据传输</li>
 </ul>
 <ol start="2">
 <li><strong>组件定义与描述</strong></li>
 </ol>
-<p>原子组件使用扩展的XML描述语言：</p>
+<p>原子组件使用扩展的XML描述语言，支持声明式编程：</p>
 <ul>
-<li>支持响应式布局定义</li>
-<li>内置数据绑定机制</li>
-<li>声明式的交互逻辑</li>
-<li>主题和样式的动态切换</li>
+<li><strong>响应式布局定义</strong>：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="nt">&lt;AtomicComponent</span><span class="w"> </span>
+<span class="w">  </span><span class="na">xmlns:atom=</span><span class="s">&quot;http://schemas.vivo.com/atom/2024&quot;</span>
+<span class="w">  </span><span class="na">atom:layout_grid=</span><span class="s">&quot;2x2&quot;</span>
+<span class="w">  </span><span class="na">atom:responsive=</span><span class="s">&quot;true&quot;</span><span class="nt">&gt;</span>
+</code></pre></div>
+
+<ul>
+<li>网格布局的原生支持</li>
+<li>多分辨率自适应</li>
+<li>约束布局增强</li>
+<li>动态布局切换</li>
+<li>
+<p>主题感知布局</p>
+</li>
+<li>
+<p><strong>数据绑定机制</strong>：</p>
+</li>
+<li>双向数据绑定支持</li>
+<li>表达式语言（Expression Language）</li>
+<li>观察者模式实现</li>
+<li>数据验证和转换</li>
+<li>
+<p>异步数据加载</p>
+</li>
+<li>
+<p><strong>声明式交互逻辑</strong>：</p>
+</li>
+<li>手势和事件的声明式定义</li>
+<li>状态机的 XML 描述</li>
+<li>动画的时间轴定义</li>
+<li>条件逻辑表达式</li>
+<li>
+<p>行为模板复用</p>
+</li>
+<li>
+<p><strong>主题样式系统</strong>：</p>
+</li>
+<li>运行时主题切换</li>
+<li>样式继承机制</li>
+<li>动态属性计算</li>
+<li>主题过渡动画</li>
+<li>深色模式自动适配</li>
 </ul>
 <ol start="3">
 <li><strong>安全沙箱机制</strong></li>
 </ol>
-<p>每个原子组件运行在受限的安全环境中：</p>
+<p>每个原子组件运行在受限的安全环境中，确保系统安全：</p>
 <ul>
-<li>基于SELinux的权限隔离</li>
-<li>受限的API访问</li>
-<li>资源使用配额管理</li>
-<li>恶意行为检测</li>
+<li><strong>SELinux策略隔离</strong>：</li>
+<li>专用的 SELinux 上下文（atomic_component）</li>
+<li>细粒度的文件访问控制</li>
+<li>网络访问限制</li>
+<li>系统调用过滤</li>
+<li>
+<p>强制访问控制（MAC）</p>
+</li>
+<li>
+<p><strong>API访问控制</strong>：</p>
+</li>
+<li>白名单机制限制可调用的系统API</li>
+<li>权限声明和运行时检查</li>
+<li>API 调用频率限制</li>
+<li>敏感API的审计日志</li>
+<li>
+<p>动态权限撤销</p>
+</li>
+<li>
+<p><strong>资源配额管理</strong>：</p>
+</li>
+<li>CPU 时间片配额（通过 cgroup）</li>
+<li>内存使用上限（包括 Java 堆和 Native）</li>
+<li>存储空间限制</li>
+<li>网络带宽控制</li>
+<li>
+<p>GPU 渲染时间配额</p>
+</li>
+<li>
+<p><strong>行为监控系统</strong>：</p>
+</li>
+<li>异常行为模式检测</li>
+<li>资源使用异常告警</li>
+<li>崩溃和 ANR 分析</li>
+<li>恶意代码特征识别</li>
+<li>实时安全评分</li>
 </ul>
 <h3 id="_6">组件生命周期管理</h3>
 <ol>

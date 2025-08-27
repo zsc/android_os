@@ -353,6 +353,30 @@
 <li>引入Audio HAL层，统一硬件接口</li>
 <li>实现了更复杂的混音和策略管理</li>
 </ul>
+<p><strong>ALSA架构层次</strong>：</p>
+<div class="codehilite"><pre><span></span><code>应用程序
+    ↓
+ALSA-lib (用户空间库)
+    ↓
+ALSA Core (内核空间)
+    ↓
+Hardware Drivers
+</code></pre></div>
+
+<p><strong>Android音频架构改造</strong>：</p>
+<div class="codehilite"><pre><span></span><code>应用程序
+    ↓
+AudioFlinger/AudioPolicyService
+    ↓
+Audio HAL
+    ↓
+TinyALSA
+    ↓
+ALSA Core (定制版)
+    ↓
+Vendor Drivers
+</code></pre></div>
+
 <p><strong>PulseAudio对比</strong></p>
 <ul>
 <li>PulseAudio是Linux桌面常用的音频服务器</li>
@@ -365,6 +389,35 @@
 <li>Android策略管理更加集中化</li>
 <li>Android对实时性要求更高</li>
 </ul>
+<p><strong>数据流模型对比</strong>：</p>
+<p>PulseAudio拉取模型：</p>
+<ol>
+<li>音频设备触发中断</li>
+<li>PulseAudio从应用拉取数据</li>
+<li>混音处理</li>
+<li>写入硬件缓冲区</li>
+</ol>
+<p>AudioFlinger推送模型：</p>
+<ol>
+<li>应用主动写入共享内存</li>
+<li>AudioFlinger定期处理</li>
+<li>混音并推送到HAL</li>
+<li>HAL写入硬件</li>
+</ol>
+<p><strong>内存使用对比</strong>：</p>
+<ul>
+<li>ALSA-lib：~500KB代码 + 配置文件</li>
+<li>TinyALSA：~50KB代码，无配置文件</li>
+<li>PulseAudio：~2MB内存占用</li>
+<li>AudioFlinger：~500KB + 共享内存池</li>
+</ul>
+<p><strong>实时性对比</strong>：</p>
+<ul>
+<li>标准Linux：延迟通常50-100ms</li>
+<li>PulseAudio：可优化到20-30ms</li>
+<li>Android：FastTrack可达10-20ms</li>
+<li>专业音频(JACK)：&lt;5ms但CPU占用高</li>
+</ul>
 <h3 id="1113-ios-core-audio">11.1.3 与iOS Core Audio对比</h3>
 <p><strong>iOS Core Audio架构</strong></p>
 <ul>
@@ -372,6 +425,18 @@
 <li>AVAudioEngine：高级音频图形API</li>
 <li>Core Audio HAL：硬件抽象层</li>
 </ul>
+<p><strong>iOS音频栈层次</strong>：</p>
+<div class="codehilite"><pre><span></span><code>AVFoundation (高级API)
+    ↓
+AVAudioEngine
+    ↓
+Audio Unit (处理图)
+    ↓
+Core Audio (底层API)
+    ↓
+IOKit Audio Family
+</code></pre></div>
+
 <p>架构对比：</p>
 <ul>
 <li>iOS采用拉取模型（Pull Model），Android采用推送模型（Push Model）</li>
@@ -379,12 +444,57 @@
 <li>iOS对音频会话（AVAudioSession）的抽象更清晰</li>
 <li>Android的音频焦点机制更加灵活</li>
 </ul>
+<p><strong>回调模型差异</strong>：</p>
+<p>iOS拉取模型示例：</p>
+<div class="codehilite"><pre><span></span><code>RenderCallback(inRefCon, ioActionFlags, inTimeStamp, 
+               inBusNumber, inNumberFrames, ioData) {
+    // 系统要求应用提供inNumberFrames帧数据
+    // 应用填充ioData缓冲区
+}
+</code></pre></div>
+
+<p>Android推送模型示例：</p>
+<div class="codehilite"><pre><span></span><code>audioTrack.write(audioData, offset, size) {
+    // 应用主动推送数据到系统
+    // 系统决定何时处理
+}
+</code></pre></div>
+
 <p>性能特征：</p>
 <ul>
 <li>iOS通常具有更低的音频延迟（&lt;10ms）</li>
 <li>Android通过FastTrack和AAudio逐步缩小差距</li>
 <li>iOS的音频栈更加封闭和优化</li>
 <li>Android需要适配更多硬件变体</li>
+</ul>
+<p><strong>音频会话管理对比</strong>：</p>
+<p>iOS AVAudioSession：</p>
+<ul>
+<li>单一全局会话对象</li>
+<li>清晰的类别定义（播放、录音、播放和录音）</li>
+<li>自动处理中断和路由变化</li>
+<li>与系统深度集成</li>
+</ul>
+<p>Android音频焦点：</p>
+<ul>
+<li>分布式焦点管理</li>
+<li>更细粒度的流类型</li>
+<li>应用需要主动处理焦点变化</li>
+<li>支持更复杂的共存策略</li>
+</ul>
+<p><strong>硬件集成差异</strong>：</p>
+<ul>
+<li>iOS：统一的硬件平台，深度优化</li>
+<li>Android：HAL层抽象多样化硬件</li>
+<li>iOS：固定的音频管线</li>
+<li>Android：可定制的音频路径</li>
+</ul>
+<p><strong>开发复杂度</strong>：</p>
+<ul>
+<li>iOS：API较为统一，学习曲线平缓</li>
+<li>Android：多套API（Java/Native），选择困难</li>
+<li>iOS：文档完善，示例丰富</li>
+<li>Android：需要理解更多底层细节</li>
 </ul>
 <h2 id="112-audioflinger">11.2 AudioFlinger核心服务</h2>
 <h3 id="1121-audioflinger">11.2.1 AudioFlinger架构设计</h3>
@@ -411,23 +521,82 @@
 <li>DuplicatingThread：复制线程，用于多设备输出</li>
 <li>FastMixerThread：快速混音线程，用于低延迟场景</li>
 </ul>
+<p><strong>线程详细分析</strong>：</p>
+<p><em>MixerThread特性</em>：</p>
+<ul>
+<li>处理周期：通常20-40ms</li>
+<li>支持最多32路音频混合</li>
+<li>自动格式转换和重采样</li>
+<li>实现音量渐变避免爆音</li>
+<li>线程优先级：ANDROID_PRIORITY_AUDIO</li>
+</ul>
+<p><em>DirectOutputThread特性</em>：</p>
+<ul>
+<li>用于Dolby/DTS等压缩格式</li>
+<li>绕过混音器直达硬件</li>
+<li>支持gapless播放</li>
+<li>减少解码延迟</li>
+<li>专用于单一音频流</li>
+</ul>
+<p><em>FastMixerThread特性</em>：</p>
+<ul>
+<li>处理周期：2-5ms</li>
+<li>限制最多8路快速音轨</li>
+<li>固定采样率（通常48kHz）</li>
+<li>SCHED_FIFO实时调度</li>
+<li>CPU核心亲和性绑定</li>
+</ul>
 <p><strong>RecordThread（录音线程）</strong></p>
 <ul>
 <li>管理音频输入设备</li>
 <li>处理录音数据的分发</li>
 <li>支持多客户端同时录音</li>
 </ul>
+<p><em>录音线程工作流程</em>：</p>
+<ol>
+<li>从HAL读取音频数据</li>
+<li>分发给各个录音客户端</li>
+<li>应用音频效果（如降噪）</li>
+<li>处理采样率转换</li>
+<li>管理客户端缓冲区</li>
+</ol>
 <p><strong>OffloadThread（卸载线程）</strong></p>
 <ul>
 <li>处理硬件解码的压缩音频</li>
 <li>减少CPU负载</li>
 <li>支持低功耗音频播放</li>
 </ul>
+<p><em>卸载播放优势</em>：</p>
+<ul>
+<li>CPU可进入深度睡眠</li>
+<li>硬件解码器效率更高</li>
+<li>支持长时间音乐播放</li>
+<li>功耗降低50-70%</li>
+</ul>
 <p>线程通信机制：</p>
 <ul>
 <li>使用FIFO队列进行命令传递</li>
 <li>通过共享内存传输音频数据</li>
 <li>采用条件变量进行同步</li>
+</ul>
+<p><strong>线程间同步详解</strong>：</p>
+<p><em>命令队列</em>：</p>
+<div class="codehilite"><pre><span></span><code>ThreadBase::sendConfigEvent() → mConfigEvents.push() → 
+    → processConfigEvents() → handleConfigEvent()
+</code></pre></div>
+
+<p><em>数据传输</em>：</p>
+<ul>
+<li>客户端写入共享内存</li>
+<li>通过mCblk控制块同步</li>
+<li>使用原子操作避免锁</li>
+<li>环形缓冲区管理</li>
+</ul>
+<p><em>时序同步</em>：</p>
+<ul>
+<li>使用MonotonicTime时间戳</li>
+<li>硬件时间戳校准</li>
+<li>处理时钟漂移</li>
 </ul>
 <h3 id="1123">11.2.3 混音与重采样机制</h3>
 <p><strong>混音器（Mixer）实现</strong></p>
@@ -446,6 +615,30 @@
 <li>混音累加</li>
 <li>限幅处理</li>
 </ol>
+<p><strong>混音算法实现</strong>：</p>
+<p><em>基础混音公式</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">output</span><span class="o">[</span><span class="n">n</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Σ</span><span class="p">(</span><span class="k">input</span><span class="o">[</span><span class="n">i</span><span class="o">][</span><span class="n">n</span><span class="o">]</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">volume</span><span class="o">[</span><span class="n">i</span><span class="o">]</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">pan</span><span class="o">[</span><span class="n">i</span><span class="o">]</span><span class="p">)</span>
+</code></pre></div>
+
+<p><em>防止溢出处理</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 16位音频混音</span>
+<span class="n">int32_t</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">track</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">activeTracks</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="o">+</span><span class="p">=</span><span class="w"> </span><span class="n">track</span><span class="p">.</span><span class="nb">sample</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">track</span><span class="p">.</span><span class="n">volume</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="c1">// 限幅到16位范围</span>
+<span class="n">output</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">clamp</span><span class="p">(</span><span class="n">acc</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">32768</span><span class="p">,</span><span class="w"> </span><span class="mi">32767</span><span class="p">);</span>
+</code></pre></div>
+
+<p><em>音量渐变实现</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="n">避免音量突变造成爆音</span>
+<span class="n">volumeInc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">targetVolume</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">currentVolume</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">rampFrames</span><span class="p">;</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">frames</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="err">{</span>
+<span class="w">    </span><span class="n">currentVolume</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">volumeInc</span><span class="p">;</span>
+<span class="w">    </span><span class="k">output</span><span class="o">[</span><span class="n">i</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">input</span><span class="o">[</span><span class="n">i</span><span class="o">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">currentVolume</span><span class="p">;</span>
+<span class="err">}</span>
+</code></pre></div>
+
 <p><strong>重采样器（Resampler）</strong></p>
 <p>Android提供多种重采样算法：</p>
 <ul>
@@ -460,6 +653,47 @@
 <li>通知音使用快速算法</li>
 <li>支持动态切换</li>
 </ul>
+<p><strong>重采样算法详解</strong>：</p>
+<p><em>线性插值</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 简单但快速</span>
+<span class="n">y</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">y0</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">y1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">y0</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">fraction</span>
+</code></pre></div>
+
+<p><em>三次插值</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Catmull-Rom样条插值</span>
+<span class="n">y</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">a0</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">y0</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">a1</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">y1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">a2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">y2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">a3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">y3</span>
+其中系数根据<span class="n">fraction计算</span>
+</code></pre></div>
+
+<p><em>Sinc插值</em>：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="n">基于sinc函数的理想低通滤波器</span>
+<span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Σ</span><span class="p">(</span><span class="n">x</span><span class="o">[</span><span class="n">n</span><span class="o">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">sinc</span><span class="p">(</span><span class="n">π</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">n</span><span class="p">)))</span>
+<span class="n">窗函数优化</span><span class="err">：</span><span class="n">Kaiser窗</span><span class="err">、</span><span class="n">Blackman窗</span>
+</code></pre></div>
+
+<p><strong>重采样性能优化</strong>：</p>
+<ul>
+<li>NEON SIMD加速</li>
+<li>查找表优化sinc计算</li>
+<li>多相滤波器结构</li>
+<li>缓存友好的数据布局</li>
+</ul>
+<p><strong>采样率转换场景</strong>：</p>
+<ul>
+<li>44.1kHz（CD音质）→ 48kHz（Android标准）</li>
+<li>任意采样率 → 设备原生采样率</li>
+<li>蓝牙设备采样率适配</li>
+<li>USB音频设备兼容</li>
+</ul>
+<p><strong>质量与性能权衡</strong>：</p>
+<div class="codehilite"><pre><span></span><code>质量等级设置：
+
+<span class="k">-</span> QUALITY_LOW: 线性插值，&lt;5% CPU
+<span class="k">-</span> QUALITY_DEFAULT: 三次插值，~10% CPU  
+<span class="k">-</span> QUALITY_HIGH: Sinc插值，~20% CPU
+<span class="k">-</span> QUALITY_DYNAMIC: 根据CPU负载动态调整
+</code></pre></div>
+
 <h3 id="1124">11.2.4 内存管理与缓冲区设计</h3>
 <p><strong>共享内存机制</strong></p>
 <p>AudioFlinger使用共享内存避免数据拷贝：</p>
@@ -468,6 +702,27 @@
 <li>客户端直接写入共享缓冲区</li>
 <li>服务端零拷贝读取</li>
 </ul>
+<p><strong>共享内存创建流程</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">AudioFlinger</span><span class="p">::</span><span class="n">createTrack</span><span class="p">()</span>
+<span class="mf">2.</span><span class="w"> </span><span class="n">分配ashmem</span><span class="p">:</span><span class="w"> </span><span class="n">ashmem_create_region</span><span class="p">()</span>
+<span class="mf">3.</span><span class="w"> </span><span class="n">映射到服务端</span><span class="p">:</span><span class="w"> </span><span class="n">mmap</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">,</span><span class="w"> </span><span class="n">PROT_READ</span><span class="p">)</span>
+<span class="mf">4.</span><span class="w"> </span><span class="n">传递fd给客户端</span>
+<span class="mf">5.</span><span class="w"> </span><span class="n">客户端映射</span><span class="p">:</span><span class="w"> </span><span class="n">mmap</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">,</span><span class="w"> </span><span class="n">PROT_WRITE</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>内存布局设计</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c">SharedMemory Layout:</span>
+<span class="nb">+------------------+</span>
+<span class="c">| Control Block    | (AudioTrackShared)</span>
+<span class="nb">+------------------+</span>
+<span class="c">| Buffer Header    | (元数据)</span>
+<span class="nb">+------------------+</span>
+<span class="c">| Audio Buffer 0   |</span>
+<span class="nb">+------------------+</span>
+<span class="c">| Audio Buffer 1   | (双缓冲)</span>
+<span class="nb">+------------------+</span>
+</code></pre></div>
+
 <p><strong>环形缓冲区（CircularBuffer）</strong></p>
 <p>音频数据使用环形缓冲区管理：</p>
 <ul>
@@ -475,12 +730,77 @@
 <li>无锁设计提高性能</li>
 <li>自动处理缓冲区回绕</li>
 </ul>
+<p><strong>无锁环形缓冲区实现</strong>：</p>
+<div class="codehilite"><pre><span></span><code>struct CircularBuffer {
+    atomic&lt;uint32_t&gt; writeIndex;
+    atomic&lt;uint32_t&gt; readIndex;
+    uint32_t capacity;
+    uint8_t* data;
+
+    // 写入操作
+    write(samples, count) {
+        available = capacity - (writeIdx - readIdx);
+        toWrite = min(count, available);
+        // 分两段写入处理回绕
+        memcpy(data + (writeIdx % capacity), samples, toWrite);
+        writeIdx.fetch_add(toWrite);
+    }
+}
+</code></pre></div>
+
+<p><strong>缓冲区大小计算</strong>：</p>
+<div class="codehilite"><pre><span></span><code>bufferSize = sampleRate × channelCount × bytesPerSample × latencyMs / 1000
+
+示例：48kHz立体声16位，20ms延迟
+bufferSize = 48000 × 2 × 2 × 20 / 1000 = 3840 bytes
+</code></pre></div>
+
 <p><strong>内存池管理</strong></p>
 <ul>
 <li>预分配音频缓冲区池</li>
 <li>减少动态内存分配</li>
 <li>支持快速缓冲区切换</li>
 </ul>
+<p><strong>缓冲区池设计</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="n">BufferPool</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">struct</span><span class="w"> </span><span class="n">Buffer</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">size_t</span><span class="w"> </span><span class="n">size</span><span class="p">;</span>
+<span class="w">        </span><span class="nb nb-Type">void</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">;</span>
+<span class="w">        </span><span class="nb nb-Type">bool</span><span class="w"> </span><span class="n">inUse</span><span class="p">;</span>
+<span class="w">    </span><span class="p">};</span>
+
+<span class="w">    </span><span class="n">vector</span><span class="o">&lt;</span><span class="n">Buffer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">buffers</span><span class="p">;</span>
+<span class="w">    </span><span class="n">mutex</span><span class="w"> </span><span class="n">poolMutex</span><span class="p">;</span>
+
+<span class="w">    </span><span class="o">//</span><span class="w"> </span><span class="err">预分配不同大小的缓冲区</span>
+<span class="w">    </span><span class="n">init</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="o">//</span><span class="w"> </span><span class="err">小缓冲区：用于低延迟</span>
+<span class="w">        </span><span class="n">allocateBuffers</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">);</span><span class="w">   </span><span class="o">//</span><span class="w"> </span><span class="mi">16</span><span class="err">个</span><span class="mi">256</span><span class="err">字节</span>
+<span class="w">        </span><span class="o">//</span><span class="w"> </span><span class="err">中等缓冲区：标准使用</span>
+<span class="w">        </span><span class="n">allocateBuffers</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span><span class="w">   </span><span class="o">//</span><span class="w"> </span><span class="mi">8</span><span class="err">个</span><span class="mi">4</span><span class="n">KB</span>
+<span class="w">        </span><span class="o">//</span><span class="w"> </span><span class="err">大缓冲区：用于</span><span class="n">offload</span>
+<span class="w">        </span><span class="n">allocateBuffers</span><span class="p">(</span><span class="mi">65536</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">);</span><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="mi">4</span><span class="err">个</span><span class="mi">64</span><span class="n">KB</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>内存对齐优化</strong>：</p>
+<ul>
+<li>缓存行对齐（64字节）</li>
+<li>SIMD指令对齐（16/32字节）</li>
+<li>页面对齐（4KB）</li>
+</ul>
+<p><strong>内存访问模式优化</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 预取下一缓冲区</span>
+<span class="n">__builtin_prefetch</span><span class="p">(</span><span class="n">nextBuffer</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
+
+<span class="c1">// NEON批量处理</span>
+<span class="n">int16x8_t</span><span class="w"> </span><span class="n">samples</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">vld1q_s16</span><span class="p">(</span><span class="nb">input</span><span class="p">);</span>
+<span class="n">int16x8_t</span><span class="w"> </span><span class="n">volume</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">vdupq_n_s16</span><span class="p">(</span><span class="n">vol</span><span class="p">);</span>
+<span class="n">int16x8_t</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">vmulq_s16</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span><span class="w"> </span><span class="n">volume</span><span class="p">);</span>
+<span class="n">vst1q_s16</span><span class="p">(</span><span class="n">output</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="p">);</span>
+</code></pre></div>
+
 <h2 id="113-audiopolicyservice">11.3 AudioPolicyService策略管理</h2>
 <h3 id="1131">11.3.1 音频策略框架</h3>
 <p>AudioPolicyService负责Android音频系统的全局策略管理，主要职责：</p>

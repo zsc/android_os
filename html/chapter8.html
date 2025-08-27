@@ -306,121 +306,399 @@
 <h2 id="_2">章节大纲</h2>
 <h2 id="81-systemserver">8.1 SystemServer启动流程</h2>
 <h3 id="811-systemserver">8.1.1 SystemServer进程创建</h3>
-<p>SystemServer是Android系统中最重要的进程之一，它承载了除内核之外几乎所有的系统服务。其启动过程始于Zygote进程，通过ZygoteInit.forkSystemServer()方法创建。</p>
+<p>SystemServer是Android系统中最重要的进程之一，它承载了除内核之外几乎所有的系统服务。其启动过程始于Zygote进程，通过ZygoteInit.forkSystemServer()方法创建。这个设计使得SystemServer能够继承Zygote预加载的类和资源，显著加快启动速度。</p>
 <p>与普通应用进程不同，SystemServer进程具有以下特殊性：</p>
 <ul>
-<li><strong>UID/GID</strong>: 运行在system用户下（UID=1000）</li>
-<li><strong>进程优先级</strong>: 设置为THREAD_PRIORITY_FOREGROUND</li>
+<li><strong>UID/GID</strong>: 运行在system用户下（UID=1000），具有访问系统资源的特权</li>
+<li><strong>进程优先级</strong>: 设置为THREAD_PRIORITY_FOREGROUND（-2），确保获得足够的CPU时间</li>
 <li><strong>OOM调整值</strong>: oom_adj设置为SYSTEM_ADJ（-900），确保不被低内存杀手终止</li>
 <li><strong>SELinux上下文</strong>: 运行在system_server域中，拥有特殊的安全策略</li>
+<li><strong>能力位(Capabilities)</strong>: 保留CAP_SYS_ADMIN、CAP_NET_ADMIN等关键能力</li>
+<li><strong>资源限制</strong>: 设置更高的文件描述符限制（通常为4096）</li>
 </ul>
 <p>启动参数通过ZygoteConnection.Arguments传递，包括：</p>
 <ul>
 <li>--nice-name=system_server：进程名称</li>
 <li>com.android.server.SystemServer：入口类</li>
+<li>--capabilities=能力位掩码：保留的Linux能力</li>
+<li>--runtime-args：传递给ART虚拟机的参数</li>
+</ul>
+<p><strong>Fork后的初始化步骤：</strong></p>
+<ol>
+<li><strong>关闭Zygote socket</strong>：SystemServer不需要处理应用启动请求</li>
+<li><strong>设置进程属性</strong>：通过Process.setProcessGroup()设置进程组</li>
+<li><strong>初始化Native服务</strong>：调用nativeInit()初始化Native层</li>
+<li><strong>创建主线程Looper</strong>：准备消息循环机制</li>
+<li><strong>加载libandroid_servers.so</strong>：包含系统服务的Native实现</li>
+</ol>
+<p><strong>与其他系统的对比：</strong></p>
+<ul>
+<li><strong>iOS</strong>: SpringBoard和各种daemon独立运行，通过launchd管理</li>
+<li><strong>Linux</strong>: systemd-pid1作为init进程，各服务独立运行</li>
+<li><strong>鸿蒙</strong>: 采用分布式设计，系统服务可跨设备运行</li>
 </ul>
 <h3 id="812">8.1.2 启动阶段划分</h3>
-<p>SystemServer的启动过程分为多个明确的阶段，每个阶段负责初始化特定类型的服务：</p>
+<p>SystemServer的启动过程分为多个明确的阶段，每个阶段负责初始化特定类型的服务。这种分阶段启动机制确保了服务依赖关系的正确处理，并优化了启动性能。</p>
+<p><strong>启动阶段详解：</strong></p>
 <ol>
 <li>
 <p><strong>PHASE_WAIT_FOR_DEFAULT_DISPLAY (100)</strong>
 - 等待默认显示设备就绪
-- 初始化显示相关的基础服务</p>
+- 初始化显示相关的基础服务
+- DisplayManagerService开始监听硬件事件
+- 此阶段通常耗时50-200ms</p>
 </li>
 <li>
 <p><strong>PHASE_LOCK_SETTINGS_READY (480)</strong>
-- LockSettingsService就绪
-- 设备加密相关服务可以开始工作</p>
+- LockSettingsService就绪，可以访问锁屏密码数据库
+- 设备加密相关服务可以开始工作
+- Gatekeeper HAL初始化完成
+- 为用户认证做准备</p>
 </li>
 <li>
 <p><strong>PHASE_SYSTEM_SERVICES_READY (500)</strong>
 - 核心系统服务就绪
-- AMS、PMS、WMS等服务完成初始化</p>
+- AMS、PMS、WMS等服务完成初始化
+- Binder线程池配置完成
+- 系统ContentProvider开始注册</p>
 </li>
 <li>
 <p><strong>PHASE_DEVICE_SPECIFIC_SERVICES_READY (520)</strong>
 - 设备特定服务就绪
-- OEM定制服务加载</p>
+- OEM定制服务加载
+- HAL服务绑定完成
+- 厂商特定的系统功能激活</p>
 </li>
 <li>
 <p><strong>PHASE_ACTIVITY_MANAGER_READY (550)</strong>
 - ActivityManager完全就绪
-- 可以开始启动应用进程</p>
+- 可以开始启动应用进程
+- Home Activity准备启动
+- 系统UI进程（SystemUI）启动</p>
 </li>
 <li>
 <p><strong>PHASE_THIRD_PARTY_APPS_CAN_START (600)</strong>
 - 第三方应用可以启动
-- 广播接收器开始工作</p>
+- 广播接收器开始工作
+- JobScheduler开始调度任务
+- 应用的自启动服务激活</p>
 </li>
 <li>
 <p><strong>PHASE_BOOT_COMPLETED (1000)</strong>
 - 系统启动完成
-- 发送ACTION_BOOT_COMPLETED广播</p>
+- 发送ACTION_BOOT_COMPLETED广播
+- 启动性能统计结束
+- 触发应用的开机自启动</p>
 </li>
 </ol>
-<h3 id="813">8.1.3 服务启动顺序与依赖管理</h3>
-<p>SystemServer采用严格的启动顺序来管理服务间的依赖关系：</p>
-<div class="codehilite"><pre><span></span><code>启动顺序：
-
-1. Bootstrap Services（引导服务）
-   - Installer：负责APK安装
-   - DeviceIdentifiersPolicyService：设备标识管理
-   - ActivityManagerService：活动管理器
-   - PowerManagerService：电源管理
-   - LightsService：LED控制
-   - DisplayManagerService：显示管理
-   - PackageManagerService：包管理
-
-2. Core Services（核心服务）
-   - BatteryService：电池状态
-   - UsageStatsService：使用统计
-   - WebViewUpdateService：WebView更新
-
-3. Other Services（其他服务）
-   - VibratorService：震动控制
-   - NetworkManagementService：网络管理
-   - ConnectivityService：连接管理
-   - WindowManagerService：窗口管理
+<p><strong>阶段间的同步机制：</strong></p>
+<p>每个服务通过实现SystemService.onBootPhase()方法来响应启动阶段：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">public</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="n">onBootPhase</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">phase</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">phase</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">PHASE_SYSTEM_SERVICES_READY</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 可以安全地获取其他系统服务</span>
+<span class="w">        </span><span class="n">mPowerManager</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getContext</span><span class="p">().</span><span class="n">getSystemService</span><span class="p">(</span><span class="n">PowerManager</span><span class="p">.</span><span class="n">class</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">phase</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">PHASE_BOOT_COMPLETED</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 执行启动完成后的初始化</span>
+<span class="w">        </span><span class="n">registerBootCompletedReceiver</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
 </code></pre></div>
 
-<p>服务间的依赖通过以下机制管理：</p>
+<p><strong>性能监控点：</strong></p>
 <ul>
-<li><strong>显式依赖声明</strong>：通过SystemServiceManager.startService()的返回值</li>
-<li><strong>阶段同步</strong>：通过onBootPhase()回调确保依赖服务就绪</li>
-<li><strong>懒加载</strong>：某些服务延迟到首次使用时创建</li>
+<li>每个阶段都有时间戳记录</li>
+<li>通过SystemServerTiming跟踪各服务启动耗时</li>
+<li>超时检测机制防止某个服务阻塞启动流程</li>
+<li>关键指标通过statsd上报</li>
 </ul>
+<p><strong>与其他系统的启动阶段对比：</strong></p>
+<ul>
+<li><strong>iOS</strong>: 采用dependency graph自动确定启动顺序</li>
+<li><strong>Linux systemd</strong>: 使用target概念管理启动阶段</li>
+<li><strong>Windows</strong>: 通过Service Control Manager的启动组管理依赖</li>
+</ul>
+<h3 id="813">8.1.3 服务启动顺序与依赖管理</h3>
+<p>SystemServer采用严格的启动顺序来管理服务间的依赖关系。这种设计既保证了服务的正确初始化，又优化了启动性能。</p>
+<p><strong>服务分类与启动顺序：</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="mf">1.</span><span class="w"> </span><span class="n">Bootstrap</span><span class="w"> </span><span class="n">Services</span><span class="err">（</span><span class="n">引导服务</span><span class="err">）</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">最基础的系统服务</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">Installer</span><span class="err">：</span><span class="n">负责APK安装</span><span class="err">，</span><span class="n">与installd守护进程通信</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">DeviceIdentifiersPolicyService</span><span class="err">：</span><span class="n">设备标识管理</span><span class="err">，</span><span class="n">生成设备唯一ID</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">UriGrantsManagerService</span><span class="err">：</span><span class="n">URI权限管理</span><span class="err">，</span><span class="n">早期初始化以支持ContentProvider</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">ActivityManagerService</span><span class="err">：</span><span class="n">活动管理器</span><span class="err">，</span><span class="n">系统的中枢服务</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">PowerManagerService</span><span class="err">：</span><span class="n">电源管理</span><span class="err">，</span><span class="n">控制系统休眠唤醒</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">RecoverySystemService</span><span class="err">：</span><span class="n">系统恢复服务</span><span class="err">，</span><span class="n">处理OTA更新</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">LightsService</span><span class="err">：</span><span class="n">LED控制</span><span class="err">，</span><span class="n">为其他服务提供硬件访问</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">DisplayManagerService</span><span class="err">：</span><span class="n">显示管理</span><span class="err">，</span><span class="n">必须早于WMS启动</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">PackageManagerService</span><span class="err">：</span><span class="n">包管理</span><span class="err">，</span><span class="n">扫描所有已安装应用</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">UserManagerService</span><span class="err">：</span><span class="n">多用户管理</span><span class="err">，</span><span class="n">在PMS之前初始化</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">OverlayManagerService</span><span class="err">：</span><span class="n">资源覆盖管理</span><span class="err">，</span><span class="n">支持主题和定制</span>
+
+<span class="mf">2.</span><span class="w"> </span><span class="n">Core</span><span class="w"> </span><span class="n">Services</span><span class="err">（</span><span class="n">核心服务</span><span class="err">）</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">系统运行的基础服务</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">BatteryService</span><span class="err">：</span><span class="n">电池状态监控和广播</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">UsageStatsService</span><span class="err">：</span><span class="n">应用使用统计</span><span class="err">，</span><span class="n">为省电优化提供数据</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">WebViewUpdateService</span><span class="err">：</span><span class="n">WebView组件更新管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">CachedDeviceStateService</span><span class="err">：</span><span class="n">设备状态缓存</span><span class="err">，</span><span class="n">减少跨进程调用</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">BinderCallsStatsService</span><span class="err">：</span><span class="n">Binder调用统计</span><span class="err">，</span><span class="n">性能分析</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">LooperStatsService</span><span class="err">：</span><span class="n">Looper消息统计</span><span class="err">，</span><span class="n">检测卡顿</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">RollbackManagerService</span><span class="err">：</span><span class="n">应用回滚管理</span><span class="err">，</span><span class="n">支持降级</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">BugreportManagerService</span><span class="err">：</span><span class="n">错误报告收集</span>
+
+<span class="mf">3.</span><span class="w"> </span><span class="n">Other</span><span class="w"> </span><span class="n">Services</span><span class="err">（</span><span class="n">其他服务</span><span class="err">）</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">功能性服务</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">VibratorService</span><span class="err">：</span><span class="n">震动控制</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">ConsumerIrService</span><span class="err">：</span><span class="n">红外发射控制</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">AlarmManagerService</span><span class="err">：</span><span class="n">定时器和闹钟管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="kr">Input</span><span class="n">ManagerService</span><span class="err">：</span><span class="n">输入设备管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">WindowManagerService</span><span class="err">：</span><span class="n">窗口管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">BluetoothService</span><span class="err">：</span><span class="n">蓝牙协议栈管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">NetworkManagementService</span><span class="err">：</span><span class="n">网络接口和路由管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">NetworkPolicyManagerService</span><span class="err">：</span><span class="n">网络策略和流量控制</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">ConnectivityService</span><span class="err">：</span><span class="n">网络连接管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">LocationManagerService</span><span class="err">：</span><span class="n">位置服务管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">AudioService</span><span class="err">：</span><span class="n">音频路由和音量控制</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">MediaSessionService</span><span class="err">：</span><span class="n">媒体会话管理</span>
+<span class="w">   </span><span class="o">-</span><span class="w"> </span><span class="n">TelephonyRegistry</span><span class="err">：</span><span class="n">电话状态监听</span>
+</code></pre></div>
+
+<p><strong>依赖管理机制：</strong></p>
+<ol>
+<li><strong>显式依赖声明</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 服务A依赖服务B的示例</span>
+<span class="n">mActivityManagerService</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SystemServiceManager</span><span class="p">.</span><span class="na">startService</span><span class="p">(</span>
+<span class="w">    </span><span class="n">ActivityManagerService</span><span class="p">.</span><span class="na">Lifecycle</span><span class="p">.</span><span class="na">class</span><span class="p">).</span><span class="na">getService</span><span class="p">();</span>
+<span class="c1">// 返回值可以被其他服务使用</span>
+</code></pre></div>
+
+<ol start="2">
+<li><strong>延迟初始化</strong>：</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 某些重操作延迟到系统空闲时执行</span>
+<span class="kd">private</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">maybeStartHeavyService</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">mSystemReady</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="n">mHeavyServiceStarted</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">BackgroundThread</span><span class="p">.</span><span class="na">getHandler</span><span class="p">().</span><span class="na">post</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">startHeavyService</span><span class="p">();</span>
+<span class="w">        </span><span class="p">});</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ol start="3">
+<li>
+<p><strong>循环依赖处理</strong>：
+- 通过接口抽象打破循环依赖
+- 使用事件总线进行解耦
+- 延迟绑定机制</p>
+</li>
+<li>
+<p><strong>启动超时保护</strong>：</p>
+</li>
+</ol>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 每个服务启动都有超时监控</span>
+<span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">SERVICE_START_TIMEOUT_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5000</span><span class="p">;</span>
+<span class="n">Future</span><span class="o">&lt;?&gt;</span><span class="w"> </span><span class="n">future</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">executor</span><span class="p">.</span><span class="na">submit</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">startService</span><span class="p">());</span>
+<span class="n">future</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">SERVICE_START_TIMEOUT_MS</span><span class="p">,</span><span class="w"> </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">MILLISECONDS</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>性能优化策略：</strong></p>
+<ol>
+<li>
+<p><strong>并行启动</strong>：
+- 无依赖关系的服务并行启动
+- 使用线程池管理启动任务
+- I/O密集型操作异步处理</p>
+</li>
+<li>
+<p><strong>预加载优化</strong>：
+- 静态数据提前加载到内存
+- 共享内存减少重复加载
+- 使用内存映射文件</p>
+</li>
+<li>
+<p><strong>懒加载服务</strong>：
+- BluetoothService：蓝牙开关打开时才完全初始化
+- NfcService：检测到NFC硬件才加载
+- TvInputManagerService：TV设备专用服务</p>
+</li>
+</ol>
 <h3 id="814-linux-systemdios-launchd">8.1.4 与Linux systemd/iOS launchd对比</h3>
+<p>不同操作系统在服务管理上采用了不同的架构设计，各有优劣：</p>
 <p><strong>Linux systemd:</strong></p>
 <ul>
-<li>采用基于依赖的并行启动</li>
-<li>使用D-Bus进行服务间通信</li>
-<li>支持socket激活和按需启动</li>
-<li>配置文件驱动（.service文件）</li>
+<li><strong>架构特点</strong>：</li>
+<li>采用基于依赖的并行启动，通过依赖图自动计算启动顺序</li>
+<li>每个服务独立进程，通过cgroups进行资源隔离</li>
+<li>使用D-Bus进行服务间通信，支持信号广播</li>
+<li>支持socket激活和按需启动，减少启动时资源消耗</li>
+<li>
+<p>配置文件驱动（.service文件），声明式管理</p>
+</li>
+<li>
+<p><strong>优势</strong>：</p>
+</li>
+<li>服务隔离性好，单个服务崩溃不影响其他服务</li>
+<li>配置灵活，易于管理和调试</li>
+<li>支持复杂的依赖关系表达</li>
+<li>
+<p>资源控制精细（CPU、内存、IO限制）</p>
+</li>
+<li>
+<p><strong>劣势</strong>：</p>
+</li>
+<li>进程间通信开销大</li>
+<li>内存占用较高（每个服务独立进程）</li>
+<li>D-Bus性能不如Binder</li>
 </ul>
 <p><strong>iOS launchd:</strong></p>
 <ul>
-<li>统一的进程管理器</li>
-<li>基于plist配置文件</li>
-<li>支持按需启动和保活</li>
-<li>使用XPC进行进程间通信</li>
+<li><strong>架构特点</strong>：</li>
+<li>统一的进程管理器，替代了init、cron、inetd等</li>
+<li>基于plist配置文件，XML格式描述服务</li>
+<li>支持按需启动（on-demand）和保活（KeepAlive）</li>
+<li>使用XPC进行进程间通信，基于Mach消息</li>
+<li>
+<p>集成了定时任务和网络服务管理</p>
+</li>
+<li>
+<p><strong>优势</strong>：</p>
+</li>
+<li>统一的服务管理接口</li>
+<li>XPC提供类型安全的IPC</li>
+<li>良好的权限沙箱隔离</li>
+<li>
+<p>自动管理服务生命周期</p>
+</li>
+<li>
+<p><strong>劣势</strong>：</p>
+</li>
+<li>配置不够灵活，plist格式限制</li>
+<li>调试相对困难</li>
+<li>闭源实现，定制能力有限</li>
 </ul>
 <p><strong>Android SystemServer:</strong></p>
 <ul>
-<li>单进程承载多服务</li>
-<li>编程式服务管理</li>
-<li>基于Binder的服务发现</li>
-<li>内存共享优化</li>
+<li><strong>架构特点</strong>：</li>
+<li>单进程承载多服务（system_server）</li>
+<li>编程式服务管理，通过Java代码控制</li>
+<li>基于Binder的服务发现和通信</li>
+<li>内存共享优化，服务间调用无需IPC</li>
+<li>
+<p>分阶段启动，精确控制初始化时序</p>
+</li>
+<li>
+<p><strong>优势</strong>：</p>
+</li>
+<li>内存效率高，服务共享进程空间</li>
+<li>服务间通信快速（同进程调用）</li>
+<li>Binder性能优越，特别适合频繁的小数据传输</li>
+<li>
+<p>启动速度快，无需创建大量进程</p>
+</li>
+<li>
+<p><strong>劣势</strong>：</p>
+</li>
+<li>稳定性风险，一个服务崩溃可能影响整个system_server</li>
+<li>调试困难，所有服务在同一进程</li>
+<li>缺乏资源隔离，服务间可能相互影响</li>
 </ul>
-<p>主要区别：</p>
+<p><strong>鸿蒙分布式服务框架:</strong></p>
+<ul>
+<li><strong>架构特点</strong>：</li>
+<li>服务可跨设备分布式部署</li>
+<li>基于软总线的透明通信</li>
+<li>支持服务的动态迁移</li>
+<li>
+<p>硬件能力抽象和虚拟化</p>
+</li>
+<li>
+<p><strong>创新点</strong>：</p>
+</li>
+<li>设备间服务共享</li>
+<li>自动服务发现和路由</li>
+<li>支持异构设备互联</li>
+</ul>
+<p><strong>性能对比：</strong></p>
+<p>| 指标 | Android | iOS | Linux | 鸿蒙 |</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>Android</th>
+<th>iOS</th>
+<th>Linux</th>
+<th>鸿蒙</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>启动速度</td>
+<td>快</td>
+<td>中</td>
+<td>慢</td>
+<td>中</td>
+</tr>
+<tr>
+<td>内存占用</td>
+<td>低</td>
+<td>中</td>
+<td>高</td>
+<td>中</td>
+</tr>
+<tr>
+<td>IPC性能</td>
+<td>高(Binder)</td>
+<td>中(XPC)</td>
+<td>低(D-Bus)</td>
+<td>中(软总线)</td>
+</tr>
+<tr>
+<td>服务隔离</td>
+<td>差</td>
+<td>好</td>
+<td>最好</td>
+<td>好</td>
+</tr>
+<tr>
+<td>配置复杂度</td>
+<td>高(代码)</td>
+<td>中(plist)</td>
+<td>低(unit)</td>
+<td>中</td>
+</tr>
+<tr>
+<td>崩溃影响</td>
+<td>系统级</td>
+<td>服务级</td>
+<td>服务级</td>
+<td>可迁移</td>
+</tr>
+</tbody>
+</table>
+<p><strong>设计理念差异：</strong></p>
 <ol>
-<li><strong>进程模型</strong>：Android将大部分服务集中在system_server进程，而systemd/launchd采用多进程模型</li>
-<li><strong>配置方式</strong>：Android通过代码管理服务，其他系统使用配置文件</li>
-<li><strong>通信机制</strong>：Android使用Binder，Linux使用D-Bus，iOS使用XPC/Mach</li>
-<li><strong>资源效率</strong>：Android的单进程模型减少了内存占用和上下文切换</li>
+<li>
+<p><strong>资源优化 vs 隔离性</strong>：
+   - Android优先考虑资源效率，牺牲了一定的隔离性
+   - Linux/iOS更注重服务隔离和稳定性</p>
+</li>
+<li>
+<p><strong>静态配置 vs 动态管理</strong>：
+   - systemd/launchd使用静态配置文件
+   - Android采用编程方式动态管理</p>
+</li>
+<li>
+<p><strong>集中式 vs 分布式</strong>：
+   - 传统系统采用单机集中式管理
+   - 鸿蒙探索分布式服务架构</p>
+</li>
+<li>
+<p><strong>通用性 vs 专用性</strong>：
+   - systemd设计为通用init系统
+   - Android SystemServer专为移动设备优化</p>
+</li>
 </ol>
 <h2 id="82">8.2 核心系统服务剖析</h2>
 <h3 id="821-activitymanagerservice-ams">8.2.1 ActivityManagerService (AMS)</h3>
-<p>ActivityManagerService是Android系统的核心中枢，负责四大组件的生命周期管理、进程管理、内存管理等关键功能。</p>
+<p>ActivityManagerService是Android系统的核心中枢，负责四大组件的生命周期管理、进程管理、内存管理等关键功能。它是system_server中最复杂的服务之一，代码量超过3万行。</p>
 <p><strong>主要职责：</strong></p>
 <ul>
 <li><strong>组件管理</strong>：Activity、Service、BroadcastReceiver、ContentProvider的启动和生命周期</li>
@@ -428,27 +706,170 @@
 <li><strong>任务栈管理</strong>：Task和Back Stack的维护</li>
 <li><strong>权限验证</strong>：运行时权限检查</li>
 <li><strong>ANR检测</strong>：应用无响应检测和处理</li>
+<li><strong>内存管理</strong>：低内存杀进程、内存压力响应</li>
+<li><strong>多用户支持</strong>：管理不同用户的应用和数据</li>
 </ul>
 <p><strong>关键数据结构：</strong></p>
-<ul>
-<li>ProcessRecord：进程信息记录</li>
-<li>ActivityRecord：Activity实例信息</li>
-<li>TaskRecord：任务栈信息</li>
-<li>ServiceRecord：Service实例信息</li>
-</ul>
-<p><strong>核心工作流程：</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="n">ProcessRecord</span><span class="err">：</span><span class="n">进程信息记录</span>
+
+<span class="o">-</span><span class="w"> </span><span class="n">pid</span><span class="err">：</span><span class="n">进程ID</span>
+<span class="o">-</span><span class="w"> </span><span class="n">uid</span><span class="err">：</span><span class="n">用户ID</span><span class="w">  </span>
+<span class="o">-</span><span class="w"> </span><span class="n">processName</span><span class="err">：</span><span class="n">进程名</span>
+<span class="o">-</span><span class="w"> </span><span class="n">info</span><span class="err">：</span><span class="n">ApplicationInfo</span>
+<span class="o">-</span><span class="w"> </span><span class="n">activities</span><span class="err">：</span><span class="n">进程中的Activity列表</span>
+<span class="o">-</span><span class="w"> </span><span class="n">services</span><span class="err">：</span><span class="n">进程中的Service列表</span>
+<span class="o">-</span><span class="w"> </span><span class="n">curAdj</span><span class="o">/</span><span class="n">setAdj</span><span class="err">：</span><span class="n">当前和设置的oom_adj值</span>
+<span class="o">-</span><span class="w"> </span><span class="n">lastActivityTime</span><span class="err">：</span><span class="n">最后活动时间</span>
+
+<span class="n">ActivityRecord</span><span class="err">：</span><span class="n">Activity实例信息</span>
+
+<span class="o">-</span><span class="w"> </span><span class="n">app</span><span class="err">：</span><span class="n">所属进程</span>
+<span class="o">-</span><span class="w"> </span><span class="n">task</span><span class="err">：</span><span class="n">所属任务栈</span>
+<span class="o">-</span><span class="w"> </span><span class="n">launchedFromUid</span><span class="err">：</span><span class="n">启动者UID</span>
+<span class="o">-</span><span class="w"> </span><span class="n">intent</span><span class="err">：</span><span class="n">启动Intent</span>
+<span class="o">-</span><span class="w"> </span><span class="n">state</span><span class="err">：</span><span class="n">生命周期状态</span>
+<span class="o">-</span><span class="w"> </span><span class="n">visible</span><span class="err">：</span><span class="n">是否可见</span>
+<span class="o">-</span><span class="w"> </span><span class="n">frontOfTask</span><span class="err">：</span><span class="n">是否在任务栈前台</span>
+
+<span class="n">TaskRecord</span><span class="err">：</span><span class="n">任务栈信息</span><span class="w">  </span>
+
+<span class="o">-</span><span class="w"> </span><span class="n">taskId</span><span class="err">：</span><span class="n">任务ID</span>
+<span class="o">-</span><span class="w"> </span><span class="n">affinity</span><span class="err">：</span><span class="n">任务亲和性</span>
+<span class="o">-</span><span class="w"> </span><span class="n">intent</span><span class="err">：</span><span class="n">根Intent</span>
+<span class="o">-</span><span class="w"> </span><span class="n">realActivity</span><span class="err">：</span><span class="n">真实Activity组件名</span>
+<span class="o">-</span><span class="w"> </span><span class="n">mActivities</span><span class="err">：</span><span class="n">Activity栈</span>
+<span class="o">-</span><span class="w"> </span><span class="n">lastActiveTime</span><span class="err">：</span><span class="n">最后活跃时间</span>
+
+<span class="n">ServiceRecord</span><span class="err">：</span><span class="n">Service实例信息</span>
+
+<span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="err">：</span><span class="n">服务组件名</span>
+<span class="o">-</span><span class="w"> </span><span class="n">app</span><span class="err">：</span><span class="n">所属进程</span>
+<span class="o">-</span><span class="w"> </span><span class="n">connections</span><span class="err">：</span><span class="n">客户端连接</span>
+<span class="o">-</span><span class="w"> </span><span class="n">startRequested</span><span class="err">：</span><span class="n">是否通过startService启动</span>
+<span class="o">-</span><span class="w"> </span><span class="n">lastActivity</span><span class="err">：</span><span class="n">最后活动时间</span>
+</code></pre></div>
+
+<p><strong>进程优先级管理：</strong></p>
+<p>AMS使用复杂的算法计算进程的oom_adj值（-1000到1000），值越小优先级越高：</p>
+<div class="codehilite"><pre><span></span><code>关键adj值：
+SYSTEM_ADJ = -900：系统进程
+PERSISTENT_PROC_ADJ = -800：持久进程
+PERSISTENT_SERVICE_ADJ = -700：持久服务
+FOREGROUND_APP_ADJ = 0：前台应用
+VISIBLE_APP_ADJ = 100：可见应用
+PERCEPTIBLE_APP_ADJ = 200：可感知应用
+BACKUP_APP_ADJ = 300：备份应用
+SERVICE_ADJ = 500：服务进程
+HOME_APP_ADJ = 600：桌面应用
+CACHED_APP_MIN_ADJ = 900：缓存应用
+</code></pre></div>
+
+<p><strong>Activity启动流程详解：</strong></p>
 <ol>
-<li><strong>Activity启动</strong>：通过startActivity() -&gt; ActivityStarter -&gt; ActivityStack</li>
-<li><strong>进程创建</strong>：通过Process.start() -&gt; Zygote socket通信</li>
-<li><strong>内存管理</strong>：通过ProcessList维护进程LRU列表，计算oom_adj值</li>
-<li><strong>广播分发</strong>：通过BroadcastQueue管理普通广播和有序广播</li>
+<li>
+<p><strong>请求阶段</strong>：
+   - 应用调用startActivity()
+   - 通过Binder调用AMS.startActivity()
+   - 权限检查和Intent解析</p>
+</li>
+<li>
+<p><strong>任务栈处理</strong>：
+   - ActivityStarter处理启动逻辑
+   - 确定目标任务栈（新建或复用）
+   - 处理启动模式（standard/singleTop/singleTask/singleInstance）</p>
+</li>
+<li>
+<p><strong>进程准备</strong>：
+   - 检查目标进程是否存在
+   - 不存在则通过Zygote创建
+   - 等待进程启动完成</p>
+</li>
+<li>
+<p><strong>生命周期调度</strong>：
+   - 通过ApplicationThread回调
+   - 暂停当前Activity
+   - 启动新Activity
+   - 处理转场动画</p>
+</li>
 </ol>
-<p><strong>与iOS对比：</strong></p>
-<ul>
-<li>iOS使用SpringBoard管理应用启动，而Android使用AMS</li>
-<li>iOS的UIApplication生命周期更简单，Android支持更复杂的组件模型</li>
-<li>iOS使用Jetsam进行内存管理，Android使用LMK/LMKD</li>
-</ul>
+<p><strong>ANR检测机制：</strong></p>
+<div class="codehilite"><pre><span></span><code>ANR触发条件：
+
+- Input dispatching：5秒内未处理输入事件
+- Service：前台服务20秒/后台服务200秒未完成
+- BroadcastReceiver：前台10秒/后台60秒未完成
+- ContentProvider：10秒内未完成操作
+
+ANR处理流程：
+
+1. 收集进程状态（traces.txt）
+2. 记录系统日志
+3. 弹出ANR对话框（可配置）
+4. 可选择等待或强制结束
+</code></pre></div>
+
+<p><strong>内存回收策略：</strong></p>
+<p>AMS通过ProcessList和LowMemoryKiller协作进行内存管理：</p>
+<ol>
+<li>
+<p><strong>内存压力等级</strong>：
+   - TRIM_MEMORY_RUNNING_LOW：运行中但内存低
+   - TRIM_MEMORY_RUNNING_MODERATE：运行中内存中等
+   - TRIM_MEMORY_RUNNING_CRITICAL：运行中内存严重不足
+   - TRIM_MEMORY_UI_HIDDEN：UI不可见</p>
+</li>
+<li>
+<p><strong>杀进程策略</strong>：
+   - 根据oom_adj值从高到低杀进程
+   - 考虑进程最近使用时间
+   - 保护前台和可见进程
+   - 避免杀死音乐播放等服务</p>
+</li>
+</ol>
+<p><strong>与其他系统对比：</strong></p>
+<p>| 特性 | Android AMS | iOS SpringBoard | Windows Task Manager |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>Android AMS</th>
+<th>iOS SpringBoard</th>
+<th>Windows Task Manager</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>组件模型</td>
+<td>四大组件</td>
+<td>UIApplication</td>
+<td>Win32进程</td>
+</tr>
+<tr>
+<td>任务切换</td>
+<td>基于Task</td>
+<td>基于App</td>
+<td>基于Window</td>
+</tr>
+<tr>
+<td>内存管理</td>
+<td>oom_adj+LMK</td>
+<td>Jetsam</td>
+<td>Working Set</td>
+</tr>
+<tr>
+<td>后台限制</td>
+<td>灵活可配置</td>
+<td>严格限制</td>
+<td>相对宽松</td>
+</tr>
+<tr>
+<td>启动优化</td>
+<td>进程复用</td>
+<td>快照恢复</td>
+<td>预取优化</td>
+</tr>
+</tbody>
+</table>
 <h3 id="822-packagemanagerservice-pms">8.2.2 PackageManagerService (PMS)</h3>
 <p>PackageManagerService负责APK的安装、卸载、查询以及权限管理，是Android应用管理的核心。</p>
 <p><strong>主要职责：</strong></p>

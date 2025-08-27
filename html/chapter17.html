@@ -530,22 +530,57 @@
 <p><em>执行模型对比</em></p>
 <ul>
 <li>TFLite：解释器模式，动态图执行，更灵活但有运行时开销</li>
+<li>支持动态形状推理，运行时确定张量维度</li>
+<li>控制流操作（If/While）通过解释器动态执行</li>
+<li>子图切换支持，可根据输入选择不同执行路径</li>
 <li>Core ML：预编译模式，静态图优化，更高效但less灵活</li>
+<li>编译时确定所有张量形状和内存布局</li>
+<li>控制流通过Metal计算管线静态展开</li>
+<li>利用编译时信息进行激进优化</li>
 </ul>
 <p><em>内存管理策略</em></p>
 <ul>
 <li>TFLite：显式内存管理，开发者可控，适合嵌入式场景</li>
+<li>Arena分配器最小化内存碎片，通过<code>ArenaPlanner</code>优化布局</li>
+<li>支持外部内存缓冲区，零拷贝数据传递</li>
+<li>内存使用可预测，适合资源受限环境</li>
 <li>Core ML：隐式管理，系统优化，开发者无需关心细节</li>
+<li>利用iOS内存压缩技术，自动swap到闪存</li>
+<li>与系统内存管理深度集成，响应内存压力</li>
+<li>Unified Memory架构优化，CPU/GPU共享内存</li>
 </ul>
 <p><em>硬件抽象层</em></p>
 <ul>
 <li>TFLite：Delegate机制，支持多种硬件后端，厂商可扩展</li>
+<li>通过<code>TfLiteDelegate</code>接口抽象不同加速器</li>
+<li>支持图分割，不同子图使用不同Delegate</li>
+<li>厂商可实现自定义Delegate接入专有硬件</li>
 <li>Core ML：Metal Performance Shaders统一接口，深度优化</li>
+<li>所有计算通过Metal统一调度，减少开销</li>
+<li>ANE（Apple Neural Engine）透明集成</li>
+<li>编译器自动选择最优硬件执行路径</li>
 </ul>
 <p><em>生态系统集成</em></p>
 <ul>
 <li>TFLite：开源生态，社区驱动，工具链丰富</li>
+<li>与TensorFlow训练框架无缝对接</li>
+<li>丰富的模型转换工具（ONNX、PyTorch等）</li>
+<li>活跃的开发者社区，快速bug修复</li>
 <li>Core ML：闭源优化，系统深度集成，工具链统一</li>
+<li>与CreateML训练工具紧密集成</li>
+<li>Xcode内置模型性能分析工具</li>
+<li>系统更新自动优化已部署模型</li>
+</ul>
+<p><em>性能特征对比</em></p>
+<ul>
+<li>TFLite在Android上的优势：</li>
+<li>更好的多厂商硬件适配性</li>
+<li>灵活的内存管理适合各种场景</li>
+<li>开源可审计，便于调试优化</li>
+<li>Core ML在iOS上的优势：</li>
+<li>更低的系统开销（深度OS集成）</li>
+<li>更好的能效比（统一调度）</li>
+<li>更简单的开发体验（高层API）</li>
 </ul>
 <h2 id="172-gpunpu">17.2 GPU/NPU加速</h2>
 <h3 id="1721-tflite-gpu-delegate">17.2.1 TFLite GPU Delegate架构</h3>
@@ -805,18 +840,27 @@
 <li>支持多种运行模式（单次/多次/预热）</li>
 <li>统计延迟分布（P50/P90/P99）</li>
 <li>硬件加速器自动选择</li>
+<li>通过<code>--num_runs</code>控制测试次数，<code>--warmup_runs</code>设置预热</li>
+<li><code>--use_gpu</code>或<code>--use_nnapi</code>强制使用特定后端</li>
+<li>CSV格式输出支持，便于数据分析</li>
 <li>逐层性能分析</li>
-<li><code>--enable_op_profiling</code>开启</li>
-<li>每个操作的执行时间</li>
-<li>内存分配统计</li>
+<li><code>--enable_op_profiling</code>开启操作级分析</li>
+<li>每个操作的执行时间breakdown</li>
+<li>内存分配统计和峰值使用量</li>
+<li>识别性能瓶颈操作（通常是Conv2D、MatMul）</li>
+<li>生成Chrome Tracing格式，可视化执行时间线</li>
 <li>内存带宽测量</li>
 <li>读写带宽分离统计</li>
-<li>cache命中率分析</li>
-<li>内存访问模式识别</li>
+<li>cache命中率分析（L1/L2/L3）</li>
+<li>内存访问模式识别（顺序/随机）</li>
+<li>带宽利用率计算（实际/理论）</li>
+<li>DRAM功耗估算基于访问模式</li>
 <li>功耗监控集成</li>
 <li>与Android Battery Historian集成</li>
-<li>实时功耗采样</li>
-<li>能效比计算</li>
+<li>实时功耗采样（通过PowerStats HAL）</li>
+<li>能效比计算（GFLOPS/Watt）</li>
+<li>温度监控防止热节流影响测试</li>
+<li>不同频率下的功耗曲线</li>
 </ul>
 <p><strong>Android Studio Profiler集成</strong></p>
 <ul>
@@ -881,45 +925,144 @@
 <p><strong>动态范围量化</strong></p>
 <ul>
 <li>权重从FP32量化到INT8</li>
+<li>使用对称量化：$q = round(r/S)$，其中$S = max(|r|)/127$</li>
+<li>权重存储为INT8，推理时反量化：$r = q \times S$</li>
+<li>适合权重分布接近零均值的情况</li>
 <li>激活值保持FP32</li>
+<li>避免校准数据集需求</li>
+<li>运行时开销略高但更灵活</li>
+<li>支持动态输入范围</li>
 <li>推理时动态量化激活</li>
+<li>每层计算激活范围</li>
+<li>选择合适的量化参数</li>
+<li>缓存常见范围减少开销</li>
 <li>约2-4倍模型压缩</li>
+<li>主要节省模型存储空间</li>
+<li>推理速度提升有限（仍有FP32计算）</li>
+<li>适合存储受限但计算资源充足场景</li>
 </ul>
 <p><strong>全整数量化</strong></p>
 <ul>
 <li>权重和激活都量化为INT8</li>
+<li>非对称量化：$q = round(r/S) + Z$</li>
+<li>支持非零中心分布</li>
+<li>量化参数per-channel或per-tensor</li>
 <li>需要代表性校准数据集</li>
-<li>使用<code>RepresentativeDataset</code></li>
+<li>通过<code>RepresentativeDataset</code>提供</li>
+<li>通常100-1000个样本足够</li>
+<li>覆盖典型使用场景分布</li>
+<li>避免极端值影响量化范围</li>
+<li>使用<code>TFLiteConverter</code>配置</li>
+<li><code>optimizations = [tf.lite.Optimize.DEFAULT]</code></li>
+<li><code>representative_dataset = representative_dataset_gen</code></li>
+<li>自动选择最优量化参数</li>
 <li>4倍压缩，显著加速</li>
+<li>INT8计算吞吐量是FP32的4倍以上</li>
+<li>减少内存带宽需求</li>
+<li>降低功耗20-50%</li>
 </ul>
 <p><strong>Float16量化</strong></p>
 <ul>
 <li>权重和激活转为FP16</li>
+<li>IEEE 754半精度格式</li>
+<li>5位指数，10位尾数</li>
+<li>动态范围约6e-5到6e4</li>
 <li>GPU友好的精度格式</li>
+<li>现代GPU原生支持FP16计算</li>
+<li>吞吐量是FP32的2倍</li>
+<li>与GPU纹理格式兼容</li>
 <li>2倍模型压缩</li>
+<li>存储空间减半</li>
+<li>内存带宽减半</li>
+<li>缓存利用率提升</li>
 <li>精度损失较小</li>
+<li>大多数模型精度损失&lt;0.5%</li>
+<li>适合对精度敏感的应用</li>
+<li>可作为INT8量化的后备方案</li>
 </ul>
 <h3 id="1732">17.3.2 量化感知训练</h3>
 <p><strong>QAT原理</strong></p>
 <ul>
 <li>训练时模拟量化效果</li>
+<li>在计算图中插入量化/反量化操作</li>
+<li>前向传播：$y = Q^{-1}(Q(x))$，其中$Q$是量化函数</li>
+<li>模拟推理时的量化误差</li>
+<li>让模型学习适应量化带来的信息损失</li>
 <li>前向传播插入fake_quant节点</li>
-<li>反向传播使用直通估计器</li>
+<li><code>FakeQuantWithMinMaxVars</code>操作</li>
+<li>计算量化边界[min, max]</li>
+<li>执行量化和反量化模拟</li>
+<li>支持可学习的量化参数</li>
+<li>反向传播使用直通估计器（STE）</li>
+<li>量化函数不可导，使用$\frac{\partial Q(x)}{\partial x} \approx 1$</li>
+<li>梯度直接传递，忽略量化阶跃</li>
+<li>避免梯度消失问题</li>
+<li>实践证明效果良好</li>
 <li>学习量化参数</li>
+<li>通过EMA更新min/max统计量</li>
+<li>或作为可训练参数优化</li>
+<li>支持per-channel细粒度量化</li>
+<li>自适应调整量化范围</li>
 </ul>
 <p><strong>量化方案选择</strong></p>
 <ul>
 <li>对称vs非对称量化</li>
+<li>对称：零点固定为0，$q = round(r/S)$<ul>
+<li>硬件实现简单，乘法即可</li>
+<li>适合权重量化（通常零均值）</li>
+<li>计算效率更高</li>
+</ul>
+</li>
+<li>非对称：可调零点，$q = round(r/S) + Z$<ul>
+<li>更好地利用量化范围</li>
+<li>适合激活量化（可能偏态分布）</li>
+<li>需要额外存储零点</li>
+</ul>
+</li>
 <li>per-channel vs per-tensor</li>
+<li>per-tensor：整个张量共享量化参数<ul>
+<li>存储开销小</li>
+<li>适合激活值量化</li>
+<li>可能损失较大</li>
+</ul>
+</li>
+<li>per-channel：每个通道独立量化<ul>
+<li>更精确，特别是通道间方差大时</li>
+<li>适合卷积权重量化</li>
+<li>略增加存储和计算</li>
+</ul>
+</li>
 <li>量化粒度权衡</li>
+<li>更细粒度→更高精度但更复杂</li>
+<li>考虑硬件支持能力</li>
+<li>平衡精度和效率</li>
 <li>激活值量化策略</li>
+<li>动态量化：运行时计算范围</li>
+<li>静态量化：使用校准数据预计算</li>
+<li>混合策略：关键层动态，其他静态</li>
 </ul>
 <p><strong>QAT实现细节</strong></p>
 <ul>
 <li>使用<code>tf.quantization.fake_quant_with_min_max_vars</code></li>
+<li>配置量化位数（通常8bit）</li>
+<li>设置初始min/max范围</li>
+<li>选择是否可训练</li>
+<li>控制量化粒度</li>
 <li>批归一化折叠</li>
+<li>将BN参数合并到前面的Conv/Dense层</li>
+<li>公式：$W_{fold} = \frac{\gamma}{\sqrt{\sigma^2 + \epsilon}} W$</li>
+<li>减少量化节点数量</li>
+<li>提升推理效率</li>
 <li>量化参数初始化</li>
+<li>使用预训练模型统计初始化</li>
+<li>或从小范围开始逐步扩大</li>
+<li>避免训练初期的不稳定</li>
+<li>关键层可以延迟量化</li>
 <li>训练策略调整</li>
+<li>降低学习率（通常0.1倍）</li>
+<li>增加训练轮数补偿精度损失</li>
+<li>使用知识蒸馏辅助</li>
+<li>渐进式量化（逐层或逐步降低位宽）</li>
 </ul>
 <h3 id="1733">17.3.3 模型压缩技术</h3>
 <p><strong>结构化剪枝</strong></p>
@@ -986,24 +1129,80 @@
 <p><strong>系统架构设计</strong></p>
 <ul>
 <li>中心服务器：模型聚合</li>
+<li>维护全局模型参数</li>
+<li>实现FederatedAveraging算法</li>
+<li>管理训练轮次和客户端选择</li>
+<li>提供模型版本控制和回滚</li>
+<li>监控训练进度和模型质量</li>
 <li>边缘设备：本地训练</li>
+<li>下载全局模型到本地</li>
+<li>使用私有数据训练</li>
+<li>计算模型更新（梯度或权重差）</li>
+<li>执行本地验证确保质量</li>
+<li>管理训练资源和调度</li>
 <li>通信协议：安全聚合</li>
+<li>TLS加密传输通道</li>
+<li>压缩算法减少带宽（如量化梯度）</li>
+<li>断点续传支持</li>
+<li>批量上传优化网络使用</li>
+<li>支持不可靠网络环境</li>
 <li>隐私保护：差分隐私</li>
+<li>本地差分隐私（LDP）添加噪声</li>
+<li>安全多方计算（SMC）协议</li>
+<li>同态加密保护梯度</li>
+<li>k-匿名性保证</li>
+<li>隐私预算追踪</li>
 </ul>
 <p><strong>训练流程</strong></p>
 <ol>
-<li>服务器分发全局模型</li>
-<li>设备下载并本地训练</li>
-<li>上传模型更新（非原始数据）</li>
-<li>服务器聚合更新</li>
-<li>分发新全局模型</li>
+<li>服务器分发全局模型
+   - 模型序列化为FlatBuffer格式
+   - 包含模型结构和初始权重
+   - 附带训练超参数配置
+   - 版本号和校验和验证</li>
+<li>设备下载并本地训练
+   - 检查设备资源（内存、电量、网络）
+   - 加载本地私有数据集
+   - 执行指定轮数的SGD训练
+   - 定期checkpoint防止中断</li>
+<li>上传模型更新（非原始数据）
+   - 计算权重差值：$\Delta W = W_{local} - W_{global}$
+   - 或上传累积梯度
+   - 添加差分隐私噪声
+   - 压缩后加密传输</li>
+<li>服务器聚合更新
+   - 收集足够客户端更新（如100个）
+   - 加权平均：$W_{new} = W_{old} + \eta \frac{\sum_{k} n_k \Delta W_k}{\sum_{k} n_k}$
+   - 其中$n_k$是客户端k的样本数
+   - 验证聚合后模型质量</li>
+<li>分发新全局模型
+   - 更新模型版本号
+   - 通知客户端新模型可用
+   - 支持增量更新减少流量
+   - 旧版本兼容处理</li>
 </ol>
 <p><strong>TFLite训练API</strong></p>
 <ul>
 <li><code>SignatureDef</code>定义训练签名</li>
+<li>指定训练输入（特征、标签）</li>
+<li>定义损失函数输出</li>
+<li>标记可训练变量</li>
+<li>支持多个签名（训练/推理/验证）</li>
 <li>支持梯度计算图</li>
+<li>自动微分实现反向传播</li>
+<li>梯度裁剪防止爆炸</li>
+<li>支持高阶导数</li>
+<li>自定义梯度函数</li>
 <li>优化器实现（SGD、Adam等）</li>
+<li><code>SGD</code>：支持momentum和nesterov</li>
+<li><code>Adam</code>：自适应学习率</li>
+<li><code>Adagrad</code>：稀疏梯度优化</li>
+<li>支持学习率调度</li>
 <li>反向传播支持</li>
+<li>通过<code>GradientTape</code>记录操作</li>
+<li>支持动态图构建</li>
+<li>内存高效的梯度累积</li>
+<li>混合精度训练支持</li>
 </ul>
 <h3 id="1742">17.4.2 增量学习实现</h3>
 <p><strong>迁移学习支持</strong></p>
